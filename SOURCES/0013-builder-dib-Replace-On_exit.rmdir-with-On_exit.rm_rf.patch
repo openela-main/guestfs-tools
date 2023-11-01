@@ -1,0 +1,144 @@
+From 3576da023fb42ceaea80b81aebad345de606a332 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Fri, 15 Jul 2022 08:55:53 +0100
+Subject: [PATCH] builder, dib: Replace On_exit.rmdir with On_exit.rm_rf
+
+Update common submodule.
+
+(cherry picked from commit f5baf83e464c276d3dae6f8e878b8f47fe0d43d9)
+---
+ builder/builder.ml            | 2 +-
+ builder/index_parser_tests.ml | 2 +-
+ builder/repository_main.ml    | 2 +-
+ common                        | 2 +-
+ dib/dib.ml                    | 2 +-
+ 5 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/builder/builder.ml b/builder/builder.ml
+index 2c9c83085..e34aae6c7 100644
+--- a/builder/builder.ml
++++ b/builder/builder.ml
+@@ -182,7 +182,7 @@ let main () =
+    * create.
+    *)
+   let tmpdir = Mkdtemp.temp_dir "virt-builder." in
+-  On_exit.rmdir tmpdir;
++  On_exit.rm_rf tmpdir;
+ 
+   (* Download the sources. *)
+   let downloader = Downloader.create ~curl:cmdline.curl ~cache ~tmpdir in
+diff --git a/builder/index_parser_tests.ml b/builder/index_parser_tests.ml
+index 39983faba..5262a1607 100644
+--- a/builder/index_parser_tests.ml
++++ b/builder/index_parser_tests.ml
+@@ -28,7 +28,7 @@ open Tools_utils
+ 
+ let tmpdir =
+   let tmpdir = Mkdtemp.temp_dir "guestfs-tests." in
+-  On_exit.rmdir tmpdir;
++  On_exit.rm_rf tmpdir;
+   tmpdir
+ 
+ let dummy_sigchecker = Sigchecker.create ~gpg:"gpg"
+diff --git a/builder/repository_main.ml b/builder/repository_main.ml
+index c5b656310..c24729c4c 100644
+--- a/builder/repository_main.ml
++++ b/builder/repository_main.ml
+@@ -420,7 +420,7 @@ let main () =
+   (* Create a temporary folder to work in *)
+   let tmpdir = Mkdtemp.temp_dir ~base_dir:cmdline.repo
+                                 "virt-builder-repository." in
+-  On_exit.rmdir tmpdir;
++  On_exit.rm_rf tmpdir;
+ 
+   let tmprepo = tmpdir // "repo" in
+   mkdir_p tmprepo 0o700;
+Submodule common af6cb55bc..fd964c1ba:
+diff --git a/common/mlcustomize/guest_packages.ml b/common/mlcustomize/guest_packages.ml
+index 4c3c34e..7c29a2a 100644
+--- a/common/mlcustomize/guest_packages.ml
++++ b/common/mlcustomize/guest_packages.ml
+@@ -73,9 +73,9 @@ let install_command packages package_management =
+   | "zypper" -> sprintf "zypper -n in -l %s" quoted_args
+ 
+   | "unknown" ->
+-    error_unknown_package_manager (s_"--install")
++    error_unknown_package_manager "--install"
+   | pm ->
+-    error_unimplemented_package_manager (s_"--install") pm
++    error_unimplemented_package_manager "--install" pm
+ 
+ let update_command package_management =
+   match package_management with
+@@ -103,9 +103,9 @@ let update_command package_management =
+   | "zypper" -> "zypper -n update -l"
+ 
+   | "unknown" ->
+-    error_unknown_package_manager (s_"--update")
++    error_unknown_package_manager "--update"
+   | pm ->
+-    error_unimplemented_package_manager (s_"--update") pm
++    error_unimplemented_package_manager "--update" pm
+ 
+ let uninstall_command packages package_management =
+   let quoted_args = String.concat " " (List.map quote packages) in
+@@ -127,6 +127,6 @@ let uninstall_command packages package_management =
+   | "zypper" -> sprintf "zypper -n rm %s" quoted_args
+ 
+   | "unknown" ->
+-    error_unknown_package_manager (s_"--uninstall")
++    error_unknown_package_manager "--uninstall"
+   | pm ->
+-    error_unimplemented_package_manager (s_"--uninstall") pm
++    error_unimplemented_package_manager "--uninstall" pm
+diff --git a/common/mltools/on_exit.ml b/common/mltools/on_exit.ml
+index 53ccb68..cae12e7 100644
+--- a/common/mltools/on_exit.ml
++++ b/common/mltools/on_exit.ml
+@@ -52,7 +52,7 @@ let do_actions () =
+     List.iter (do_action (fun file -> Unix.unlink file)) !files;
+     List.iter (do_action (
+       fun dir ->
+-        let cmd = sprintf "rm -rf %s" (Filename.quote dir) in
++        let cmd = sprintf "rm -rf -- %s" (Filename.quote dir) in
+         ignore (Tools_utils.shell_command cmd)
+       )
+     ) !rmdirs;
+@@ -102,7 +102,7 @@ let unlink filename =
+   register ();
+   List.push_front filename files
+ 
+-let rmdir dir =
++let rm_rf dir =
+   register ();
+   List.push_front dir rmdirs
+ 
+diff --git a/common/mltools/on_exit.mli b/common/mltools/on_exit.mli
+index a02e3db..9bcf104 100644
+--- a/common/mltools/on_exit.mli
++++ b/common/mltools/on_exit.mli
+@@ -47,7 +47,7 @@ val f : (unit -> unit) -> unit
+ val unlink : string -> unit
+ (** Unlink a single temporary file on exit. *)
+ 
+-val rmdir : string -> unit
++val rm_rf : string -> unit
+ (** Recursively remove a temporary directory on exit (using [rm -rf]). *)
+ 
+ val kill : ?signal:int -> int -> unit
+diff --git a/dib/dib.ml b/dib/dib.ml
+index f5ce604c8..a4ba36040 100644
+--- a/dib/dib.ml
++++ b/dib/dib.ml
+@@ -550,7 +550,7 @@ let main () =
+   let image_basename_d = image_basename ^ ".d" in
+ 
+   let tmpdir = Mkdtemp.temp_dir "dib." in
+-  On_exit.rmdir tmpdir;
++  On_exit.rm_rf tmpdir;
+   let auxtmpdir = tmpdir // "in_target.aux" in
+   do_mkdir auxtmpdir;
+   let hookstmpdir = auxtmpdir // "hooks" in
+-- 
+2.31.1
+
