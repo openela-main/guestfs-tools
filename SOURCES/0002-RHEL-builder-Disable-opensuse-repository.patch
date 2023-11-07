@@ -1,0 +1,26 @@
+From 01ebf5d7d5656b45168de9081906522a32008080 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Mon, 21 Nov 2022 13:03:22 +0000
+Subject: [PATCH] RHEL: builder: Disable opensuse repository
+
+Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2145160
+(cherry picked from commit 8e0e91c923bd7076fd906a71678ddd3f328ae2c0)
+---
+ builder/opensuse.conf.in | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/builder/opensuse.conf.in b/builder/opensuse.conf.in
+index 19f979699..a57fc6977 100644
+--- a/builder/opensuse.conf.in
++++ b/builder/opensuse.conf.in
+@@ -1,3 +1,7 @@
+-[opensuse.org]
+-uri=http://download.opensuse.org/repositories/Virtualization:/virt-builder-images/images/index
+-gpgkey=file://@SYSCONFDIR@/virt-builder/repos.d/opensuse.gpg
++# https://bugzilla.redhat.com/show_bug.cgi?id=2145160
++# This is disabled in RHEL by default, but you can enable it by
++# uncommenting the lines below.
++
++#[opensuse.org]
++#uri=http://download.opensuse.org/repositories/Virtualization:/virt-builder-images/images/index
++#gpgkey=file://@SYSCONFDIR@/virt-builder/repos.d/opensuse.gpg

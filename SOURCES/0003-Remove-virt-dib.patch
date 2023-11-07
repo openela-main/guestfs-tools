@@ -1,0 +1,3627 @@
+From e9f49fd262d0ce5e18789cb2e03225246fc65658 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 7 Feb 2023 13:20:36 +0000
+Subject: [PATCH] Remove virt-dib
+
+The tool only supports an older version of the diskimage-builder
+metadata, and we do not have the time or inclination to update it to a
+newer version.
+
+Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=1910039
+(cherry picked from commit 57423d907270526ea664ff15601cce956353820e)
+---
+ .gitignore                    |    4 -
+ Makefile.am                   |    3 +-
+ bash/Makefile.am              |    3 +-
+ bash/virt-alignment-scan      |    6 -
+ configure.ac                  |    1 -
+ dib/Makefile.am               |  169 ------
+ dib/cmdline.ml                |  267 ---------
+ dib/cmdline.mli               |   52 --
+ dib/dib.ml                    | 1007 ---------------------------------
+ dib/dib.mli                   |   19 -
+ dib/dummy.c                   |    2 -
+ dib/elements.ml               |  207 -------
+ dib/elements.mli              |   61 --
+ dib/output_format.ml          |  192 -------
+ dib/output_format.mli         |  131 -----
+ dib/output_format_docker.ml   |   57 --
+ dib/output_format_qcow2.ml    |   56 --
+ dib/output_format_raw.ml      |   31 -
+ dib/output_format_squashfs.ml |   39 --
+ dib/output_format_tar.ml      |   35 --
+ dib/output_format_tgz.ml      |   35 --
+ dib/output_format_vhd.ml      |   47 --
+ dib/test-virt-dib-docs.sh     |   23 -
+ dib/utils.ml                  |  111 ----
+ dib/utils.mli                 |   66 ---
+ dib/virt-dib.pod              |  727 ------------------------
+ run.in                        |    1 -
+ 27 files changed, 2 insertions(+), 3350 deletions(-)
+ delete mode 100644 dib/Makefile.am
+ delete mode 100644 dib/cmdline.ml
+ delete mode 100644 dib/cmdline.mli
+ delete mode 100644 dib/dib.ml
+ delete mode 100644 dib/dib.mli
+ delete mode 100644 dib/dummy.c
+ delete mode 100644 dib/elements.ml
+ delete mode 100644 dib/elements.mli
+ delete mode 100644 dib/output_format.ml
+ delete mode 100644 dib/output_format.mli
+ delete mode 100644 dib/output_format_docker.ml
+ delete mode 100644 dib/output_format_qcow2.ml
+ delete mode 100644 dib/output_format_raw.ml
+ delete mode 100644 dib/output_format_squashfs.ml
+ delete mode 100644 dib/output_format_tar.ml
+ delete mode 100644 dib/output_format_tgz.ml
+ delete mode 100644 dib/output_format_vhd.ml
+ delete mode 100755 dib/test-virt-dib-docs.sh
+ delete mode 100644 dib/utils.ml
+ delete mode 100644 dib/utils.mli
+ delete mode 100644 dib/virt-dib.pod
+
+diff --git a/.gitignore b/.gitignore
+index da2a0266b..b0ada2e3c 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -30,7 +30,6 @@ Makefile.in
+ /bash/virt-cat
+ /bash/virt-customize
+ /bash/virt-df
+-/bash/virt-dib
+ /bash/virt-diff
+ /bash/virt-drivers
+ /bash/virt-edit
+@@ -95,9 +94,6 @@ Makefile.in
+ /customize/test-settings-*.sh
+ /customize/virt-customize
+ /df/virt-df
+-/dib/.depend
+-/dib/output_format_*.mli
+-/dib/virt-dib
+ /drivers/.depend
+ /drivers/virt-drivers
+ /diff/virt-diff
+diff --git a/Makefile.am b/Makefile.am
+index 311789ed1..ca1fc03c9 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -60,7 +60,6 @@ SUBDIRS += get-kernel
+ SUBDIRS += resize
+ SUBDIRS += sparsify
+ SUBDIRS += sysprep
+-SUBDIRS += dib
+ endif
+ 
+ # bash-completion
+@@ -121,7 +120,7 @@ po/POTFILES: configure.ac
+ po/POTFILES-ml: configure.ac
+ 	rm -f $@ $@-t
+ 	cd $(srcdir); \
+-	find builder common/ml* customize dib drivers get-kernel resize sparsify sysprep -name '*.ml' | \
++	find builder common/ml* customize drivers get-kernel resize sparsify sysprep -name '*.ml' | \
+ 	grep -v '^builder/templates/' | \
+ 	grep -v '^common/mlv2v/' | \
+ 	grep -v -E '.*_tests\.ml$$' | \
+diff --git a/bash/Makefile.am b/bash/Makefile.am
+index 000fab5eb..9a63736d2 100644
+--- a/bash/Makefile.am
++++ b/bash/Makefile.am
+@@ -28,7 +28,6 @@ symlinks = \
+ 	virt-customize \
+ 	virt-diff \
+ 	virt-df \
+-	virt-dib \
+ 	virt-drivers \
+ 	virt-edit \
+ 	virt-filesystems \
+@@ -55,7 +54,7 @@ CLEANFILES += \
+ # common options like -d is handled by this common script.  However
+ # this script cannot deal with commands that use --ro/--rw
+ # (eg. virt-rescue).  Those tools have to be handled individually.
+-virt-builder virt-cat virt-customize virt-df virt-dib virt-diff virt-drivers \
++virt-builder virt-cat virt-customize virt-df virt-diff virt-drivers \
+ virt-edit virt-filesystems virt-format virt-get-kernel virt-inspector \
+ virt-log virt-ls \
+ virt-resize virt-sparsify virt-sysprep \
+diff --git a/bash/virt-alignment-scan b/bash/virt-alignment-scan
+index b93a00118..bb9a71ebf 100644
+--- a/bash/virt-alignment-scan
++++ b/bash/virt-alignment-scan
+@@ -109,12 +109,6 @@ _virt_customize ()
+ } &&
+ complete -o default -F _virt_customize virt-customize
+ 
+-_virt_dib ()
+-{
+-    _guestfs_virttools "virt-dib" 0
+-} &&
+-complete -o default -F _virt_dib virt-dib
+-
+ _virt_df ()
+ {
+     _guestfs_virttools "virt-df" 1
+diff --git a/configure.ac b/configure.ac
+index 24a89d640..34c66b80e 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -136,7 +136,6 @@ AC_CONFIG_FILES([Makefile
+                  customize/Makefile
+                  docs/Makefile
+                  df/Makefile
+-                 dib/Makefile
+                  diff/Makefile
+                  drivers/Makefile
+                  edit/Makefile
+diff --git a/dib/Makefile.am b/dib/Makefile.am
+deleted file mode 100644
+index 7581feb78..000000000
+--- a/dib/Makefile.am
++++ /dev/null
+@@ -1,169 +0,0 @@
+-# libguestfs virt-dib tool
+-# Copyright (C) 2015 Red Hat Inc.
+-#
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2 of the License, or
+-# (at your option) any later version.
+-#
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+-
+-include $(top_srcdir)/subdir-rules.mk
+-
+-EXTRA_DIST = \
+-	$(SOURCES_MLI) $(SOURCES_ML) $(SOURCES_C) \
+-	test-virt-dib-docs.sh \
+-        virt-dib.pod
+-
+-SOURCES_MLI = \
+-	cmdline.mli \
+-	dib.mli \
+-	elements.mli \
+-	output_format.mli \
+-	$(patsubst %,output_format_%.mli,$(formats)) \
+-	utils.mli
+-
+-# Filenames output_format_<name>.ml in alphabetical order.
+-formats = \
+-	docker \
+-	qcow2 \
+-	raw \
+-	squashfs \
+-	tar \
+-	tgz \
+-	vhd
+-
+-SOURCES_ML = \
+-	utils.ml \
+-	output_format.ml \
+-	cmdline.ml \
+-	elements.ml \
+-	$(patsubst %,output_format_%.ml,$(formats)) \
+-	dib.ml
+-
+-SOURCES_C = \
+-	dummy.c
+-
+-bin_PROGRAMS =
+-
+-if HAVE_OCAML
+-
+-bin_PROGRAMS += virt-dib
+-
+-virt_dib_SOURCES = $(SOURCES_C)
+-virt_dib_CPPFLAGS = \
+-	-I. \
+-	-I$(top_builddir) \
+-	-I$(top_srcdir)/gnulib/lib -I$(top_builddir)/gnulib/lib \
+-	-I$(shell $(OCAMLC) -where) \
+-	-I$(top_srcdir)/gnulib/lib \
+-	-I$(top_srcdir)/common/utils \
+-	-I$(top_srcdir)/lib
+-virt_dib_CFLAGS = \
+-	-pthread \
+-	$(WARN_CFLAGS) $(WERROR_CFLAGS)
+-
+-BOBJECTS = \
+-	$(SOURCES_ML:.ml=.cmo)
+-XOBJECTS = $(BOBJECTS:.cmo=.cmx)
+-
+-OCAMLPACKAGES = \
+-	-package str,unix,guestfs \
+-	-I $(top_builddir)/common/utils/.libs \
+-	-I $(top_builddir)/gnulib/lib/.libs \
+-	-I $(top_builddir)/ocaml \
+-	-I $(top_builddir)/common/mlstdutils \
+-	-I $(top_builddir)/common/mlutils \
+-	-I $(top_builddir)/common/mlgettext \
+-	-I $(top_builddir)/common/mlpcre \
+-	-I $(top_builddir)/common/mltools
+-if HAVE_OCAML_PKG_GETTEXT
+-OCAMLPACKAGES += -package gettext-stub
+-endif
+-
+-OCAMLCLIBS = \
+-	-pthread -lpthread \
+-	-lutils \
+-	$(LIBXML2_LIBS) \
+-	$(LIBGUESTFS_LIBS) \
+-	$(LIBINTL) \
+-	-lgnu
+-
+-OCAMLFLAGS = $(OCAML_FLAGS) $(OCAML_WARN_ERROR) -ccopt '$(CFLAGS)'
+-
+-if !HAVE_OCAMLOPT
+-OBJECTS = $(BOBJECTS)
+-else
+-OBJECTS = $(XOBJECTS)
+-endif
+-
+-OCAMLLINKFLAGS = \
+-	mlstdutils.$(MLARCHIVE) \
+-	mlguestfs.$(MLARCHIVE) \
+-	mlcutils.$(MLARCHIVE) \
+-	mlgettext.$(MLARCHIVE) \
+-	mlpcre.$(MLARCHIVE) \
+-	mltools.$(MLARCHIVE) \
+-	$(LINK_CUSTOM_OCAMLC_ONLY)
+-
+-virt_dib_DEPENDENCIES = \
+-	$(OBJECTS) \
+-	../common/mlstdutils/mlstdutils.$(MLARCHIVE) \
+-	../common/mlutils/mlcutils.$(MLARCHIVE) \
+-	../common/mlgettext/mlgettext.$(MLARCHIVE) \
+-	../common/mlpcre/mlpcre.$(MLARCHIVE) \
+-	../common/mltools/mltools.$(MLARCHIVE) \
+-	$(top_builddir)/ocaml-link.sh
+-virt_dib_LINK = \
+-	$(top_builddir)/ocaml-link.sh -cclib '$(OCAMLCLIBS)' -- \
+-	  $(OCAMLFIND) $(BEST) $(OCAMLFLAGS) $(OCAMLPACKAGES) $(OCAMLLINKFLAGS) \
+-	  $(OBJECTS) -o $@
+-
+-# The output_format_*.mli files are all empty and autogenerated.
+-CLEANFILES += \
+-	$(patsubst %,output_format_%.mli,$(formats))
+-
+-output_format_%.mli:
+-	rm -f $@ $@-t
+-	echo '(* This file is generated by Makefile.am. *)' >> $@-t
+-	echo '(* Nothing is exported from output format modules. *)' >> $@-t
+-	mv $@-t $@
+-
+-# Tests.
+-
+-TESTS_ENVIRONMENT = $(top_builddir)/run --test
+-
+-TESTS = test-virt-dib-docs.sh
+-
+-# Manual pages and HTML files for the website.
+-
+-man_MANS = virt-dib.1
+-
+-noinst_DATA = $(top_builddir)/website/virt-dib.1.html
+-
+-virt-dib.1 $(top_builddir)/website/virt-dib.1.html: stamp-virt-dib.pod
+-
+-stamp-virt-dib.pod: virt-dib.pod
+-	$(PODWRAPPER) \
+-	  --man virt-dib.1 \
+-	  --html $(top_builddir)/website/virt-dib.1.html \
+-	  --license GPLv2+ \
+-	  --warning safe \
+-	  $<
+-	touch $@
+-
+-# OCaml dependencies.
+-.depend: $(SOURCES_MLI) $(SOURCES_ML)
+-	$(top_builddir)/ocaml-dep.sh $^
+--include .depend
+-
+-endif
+-
+-.PHONY: docs
+diff --git a/dib/cmdline.ml b/dib/cmdline.ml
+deleted file mode 100644
+index 11ff57341..000000000
+--- a/dib/cmdline.ml
++++ /dev/null
+@@ -1,267 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2015 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-(* Command line argument parsing. *)
+-
+-open Std_utils
+-open Tools_utils
+-open Common_gettext.Gettext
+-open Getopt.OptionName
+-
+-open Utils
+-
+-open Printf
+-
+-type cmdline = {
+-  debug : int;
+-  basepath : string;
+-  elements : string list;
+-  excluded_elements : string list;
+-  element_paths : string list;
+-  excluded_scripts : string list;
+-  use_base : bool;
+-  drive : string option;
+-  drive_format : string option;
+-  image_name : string;
+-  fs_type : string;
+-  size : int64;
+-  root_label : string option;
+-  install_type : string;
+-  image_cache : string option;
+-  mkfs_options : string option;
+-  is_ramdisk : bool;
+-  ramdisk_element : string;
+-  extra_packages : string list;
+-  memsize : int option;
+-  network : bool;
+-  smp : int option;
+-  delete_on_failure : bool;
+-  formats : Output_format.set;
+-  arch : string;
+-  envvars : string list;
+-  checksum : bool;
+-  python : string option;
+-}
+-
+-let parse_cmdline () =
+-  let usage_msg =
+-    sprintf (f_"\
+-%s: run diskimage-builder elements to generate images
+-
+- virt-dib -B DIB-LIB -p ELEMENTS-PATH elements...
+-
+-A short summary of the options is given below.  For detailed help please
+-read the man page virt-dib(1).
+-")
+-      prog in
+-
+-  let elements = ref [] in
+-  let append_element element = List.push_front element elements in
+-
+-  let excluded_elements = ref [] in
+-  let append_excluded_element element = List.push_front element excluded_elements in
+-
+-  let element_paths = ref [] in
+-  let append_element_path arg = List.push_front arg element_paths in
+-
+-  let excluded_scripts = ref [] in
+-  let append_excluded_script arg = List.push_front arg excluded_scripts in
+-
+-  let debug = ref 0 in
+-  let set_debug arg =
+-    if arg < 0 then
+-      error (f_"--debug parameter must be >= 0");
+-    debug := arg in
+-
+-  let basepath = ref "" in
+-
+-  let image_name = ref "image" in
+-
+-  let fs_type = ref "ext4" in
+-
+-  let size = ref (unit_GB 5) in
+-  let set_size arg = size := parse_size arg in
+-
+-  let memsize = ref None in
+-  let set_memsize arg = memsize := Some arg in
+-
+-  let network = ref true in
+-
+-  let smp = ref None in
+-  let set_smp arg = smp := Some arg in
+-
+-  let formats = ref None in
+-  let set_format arg =
+-    let fmts = List.remove_duplicates (String.nsplit "," arg) in
+-    let fmtset =
+-      List.fold_left (
+-        fun fmtset fmt ->
+-          try Output_format.add_to_set fmt fmtset
+-          with Not_found ->
+-            error (f_"invalid format ‘%s’ in --formats") fmt
+-      ) Output_format.empty_set fmts in
+-    formats := Some fmtset in
+-
+-  let envvars = ref [] in
+-  let append_envvar arg = List.push_front arg envvars in
+-
+-  let use_base = ref true in
+-
+-  let arch = ref "" in
+-
+-  let drive = ref None in
+-  let set_drive arg = drive := Some arg in
+-  let drive_format = ref None in
+-  let set_drive_format arg = drive_format := Some arg in
+-
+-  let root_label = ref None in
+-  let set_root_label arg = root_label := Some arg in
+-
+-  let install_type = ref "source" in
+-
+-  let image_cache = ref None in
+-  let set_image_cache arg = image_cache := Some arg in
+-
+-  let delete_on_failure = ref true in
+-
+-  let is_ramdisk = ref false in
+-  let ramdisk_element = ref "ramdisk" in
+-
+-  let mkfs_options = ref None in
+-  let set_mkfs_options arg = mkfs_options := Some arg in
+-
+-  let extra_packages = ref [] in
+-  let append_extra_packages arg =
+-    List.push_front_list (List.rev (String.nsplit "," arg)) extra_packages in
+-
+-  let checksum = ref false in
+-
+-  let python = ref None in
+-  let set_python arg = python := Some arg in
+-
+-  let argspec = [
+-    [ S 'p'; L"element-path" ],           Getopt.String ("path", append_element_path),  s_"Add new a elements location";
+-    [ L"exclude-element" ], Getopt.String ("element", append_excluded_element),
+-      s_"Exclude the specified element";
+-    [ L"exclude-script" ], Getopt.String ("script", append_excluded_script),
+-      s_"Exclude the specified script";
+-    [ L"envvar" ],     Getopt.String ("envvar[=value]", append_envvar),   s_"Carry/set this environment variable";
+-    [ L"skip-base" ],  Getopt.Clear use_base,        s_"Skip the inclusion of the ‘base’ element";
+-    [ L"root-label" ], Getopt.String ("label", set_root_label), s_"Label for the root fs";
+-    [ L"install-type" ], Getopt.Set_string ("type", install_type),  s_"Installation type";
+-    [ L"image-cache" ], Getopt.String ("directory", set_image_cache), s_"Location for cached images";
+-    [ L"mkfs-options" ], Getopt.String ("option", set_mkfs_options),
+-                                              s_"Add mkfs options";
+-    [ L"extra-packages" ], Getopt.String ("pkg,...", append_extra_packages),
+-      s_"Add extra packages to install";
+-    [ L"checksum" ],   Getopt.Set checksum,          s_"Generate MD5 and SHA256 checksum files";
+-    [ L"python" ],     Getopt.String ("python", set_python),         s_"Set Python interpreter";
+-
+-    [ L"ramdisk" ],    Getopt.Set is_ramdisk,        "Switch to a ramdisk build";
+-    [ L"ramdisk-element" ], Getopt.Set_string ("name", ramdisk_element), s_"Main element for building ramdisks";
+-
+-    [ L"name" ],       Getopt.Set_string ("name", image_name), s_"Name of the image";
+-    [ L"fs-type" ],    Getopt.Set_string ("fs", fs_type),    s_"Filesystem for the image";
+-    [ L"size" ],       Getopt.String ("size", set_size),       s_"Set output disk size";
+-    [ L"formats" ],    Getopt.String ("qcow2,tgz,...", set_format),     s_"Output formats";
+-    [ L"arch" ],       Getopt.Set_string ("arch", arch),       s_"Output architecture";
+-    [ L"drive" ],      Getopt.String ("path", set_drive),      s_"Optional drive for caches";
+-    [ L"drive-format" ], Getopt.String (s_"format", set_drive_format), s_"Format of optional drive";
+-
+-    [ S 'm'; L"memsize" ],           Getopt.Int ("mb", set_memsize),       s_"Set memory size";
+-    [ L"network" ],    Getopt.Set network,           s_"Enable appliance network (default)";
+-    [ L"no-network" ], Getopt.Clear network,      s_"Disable appliance network";
+-    [ L"smp" ],        Getopt.Int ("vcpus", set_smp),           s_"Set number of vCPUs";
+-    [ L"no-delete-on-failure" ], Getopt.Clear delete_on_failure,
+-                                               s_"Don’t delete output file on failure";
+-
+-    [ L"debug" ],      Getopt.Int ("level", set_debug),         s_"Set debug level";
+-    [ S 'B' ],           Getopt.Set_string ("path", basepath),   s_"Base path of diskimage-builder library";
+-  ] in
+-  let argspec = argspec @ Output_format.extra_args () in
+-
+-  let opthandle = create_standard_options argspec ~anon_fun:append_element ~machine_readable:true usage_msg in
+-  Getopt.parse opthandle.getopt;
+-
+-  let debug = !debug in
+-  let basepath = !basepath in
+-  let elements = List.rev !elements in
+-  let excluded_elements = List.rev !excluded_elements in
+-  let element_paths = List.rev !element_paths in
+-  let excluded_scripts = List.rev !excluded_scripts in
+-  let image_name = !image_name in
+-  let fs_type = !fs_type in
+-  let size = !size in
+-  let memsize = !memsize in
+-  let network = !network in
+-  let smp = !smp in
+-  let formats = !formats in
+-  let envvars = !envvars in
+-  let use_base = !use_base in
+-  let arch = !arch in
+-  let drive = !drive in
+-  let drive_format = !drive_format in
+-  let root_label = !root_label in
+-  let install_type = !install_type in
+-  let image_cache = !image_cache in
+-  let delete_on_failure = !delete_on_failure in
+-  let is_ramdisk = !is_ramdisk in
+-  let ramdisk_element = !ramdisk_element in
+-  let mkfs_options = !mkfs_options in
+-  let extra_packages = List.rev !extra_packages in
+-  let checksum = !checksum in
+-  let python = !python in
+-
+-  (* No elements and machine-readable mode?  Print some facts. *)
+-  (match elements, machine_readable () with
+-  | [], Some { pr } ->
+-    pr "virt-dib\n";
+-    let formats_list = Output_format.list_formats () in
+-    List.iter (pr "output:%s\n") formats_list;
+-    exit 0
+-  | _, _ -> ()
+-  );
+-
+-  if basepath = "" then
+-    error (f_"-B must be specified");
+-
+-  let formats =
+-    match formats with
+-    | None -> Output_format.add_to_set "qcow2" Output_format.empty_set
+-    | Some fmtset ->
+-      if Output_format.set_cardinal fmtset = 0 then
+-        error (f_"the list of output formats cannot be empty");
+-      fmtset in
+-
+-  if elements = [] then
+-    error (f_"at least one distribution root element must be specified");
+-
+-  let python = Option.map get_required_tool python in
+-
+-  { debug = debug; basepath = basepath; elements = elements;
+-    excluded_elements = excluded_elements; element_paths = element_paths;
+-    excluded_scripts = excluded_scripts; use_base = use_base; drive = drive;
+-    drive_format = drive_format; image_name = image_name; fs_type = fs_type;
+-    size = size; root_label = root_label; install_type = install_type;
+-    image_cache = image_cache; mkfs_options = mkfs_options;
+-    is_ramdisk = is_ramdisk; ramdisk_element = ramdisk_element;
+-    extra_packages = extra_packages; memsize = memsize; network = network;
+-    smp = smp; delete_on_failure = delete_on_failure;
+-    formats = formats; arch = arch; envvars = envvars;
+-    checksum = checksum; python = python;
+-  }
+diff --git a/dib/cmdline.mli b/dib/cmdline.mli
+deleted file mode 100644
+index 5c82efd60..000000000
+--- a/dib/cmdline.mli
++++ /dev/null
+@@ -1,52 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2015 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-(** Command line argument parsing. *)
+-
+-type cmdline = {
+-  debug : int;
+-  basepath : string;
+-  elements : string list;
+-  excluded_elements : string list;
+-  element_paths : string list;
+-  excluded_scripts : string list;
+-  use_base : bool;
+-  drive : string option;
+-  drive_format : string option;
+-  image_name : string;
+-  fs_type : string;
+-  size : int64;
+-  root_label : string option;
+-  install_type : string;
+-  image_cache : string option;
+-  mkfs_options : string option;
+-  is_ramdisk : bool;
+-  ramdisk_element : string;
+-  extra_packages : string list;
+-  memsize : int option;
+-  network : bool;
+-  smp : int option;
+-  delete_on_failure : bool;
+-  formats : Output_format.set;
+-  arch : string;
+-  envvars : string list;
+-  checksum : bool;
+-  python : string option;
+-}
+-
+-val parse_cmdline : unit -> cmdline
+diff --git a/dib/dib.ml b/dib/dib.ml
+deleted file mode 100644
+index 9ae154b86..000000000
+--- a/dib/dib.ml
++++ /dev/null
+@@ -1,1007 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2015 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-open Std_utils
+-open Tools_utils
+-open Unix_utils
+-open Common_gettext.Gettext
+-
+-open Cmdline
+-open Utils
+-open Elements
+-
+-open Printf
+-
+-module G = Guestfs
+-
+-let checksums = [ "md5"; "sha256" ]
+-and tool_of_checksum csum =
+-  csum ^ "sum"
+-
+-let exclude_elements elements = function
+-  | [] ->
+-    (* No elements to filter out, so just don't bother iterating through
+-     * the elements. *)
+-    elements
+-  | excl -> StringSet.filter (not_in_list excl) elements
+-
+-let read_envvars envvars =
+-  List.filter_map (
+-    fun var ->
+-      let i = String.find var "=" in
+-      if i = -1 then (
+-        try Some (var, Sys.getenv var)
+-        with Not_found -> None
+-      ) else (
+-        let len = String.length var in
+-        Some (String.sub var 0 i, String.sub var (i + 1) (len - i - 1))
+-      )
+-  ) envvars
+-
+-let read_dib_envvars () =
+-  let vars = Array.to_list (Unix.environment ()) in
+-  let vars = List.filter (fun x -> String.is_prefix x "DIB_") vars in
+-  let vars = List.map (fun x -> x ^ "\n") vars in
+-  String.concat "" vars
+-
+-let write_script fn text =
+-  with_open_out fn (
+-    fun oc ->
+-      output_string oc text;
+-      flush oc
+-  );
+-  Unix.chmod fn 0o755
+-
+-let envvars_string l =
+-  let l = List.map (
+-    fun (var, value) ->
+-      sprintf "export %s=%s" var (quote value)
+-  ) l in
+-  String.concat "\n" l
+-
+-let prepare_external ~envvars ~dib_args ~dib_vars ~out_name ~root_label
+-  ~rootfs_uuid ~image_cache ~arch ~network ~debug ~fs_type ~checksum
+-  ~python
+-  destdir libdir fakebindir loaded_elements all_elements element_paths =
+-  let network_string = if network then "" else "1" in
+-  let checksum_string = if checksum then "1" else "" in
+-  let elements_paths_yaml =
+-    List.map (
+-      fun e ->
+-        sprintf "%s: %s" e (quote (Hashtbl.find loaded_elements e).directory)
+-    ) (StringSet.elements all_elements) in
+-  let elements_paths_yaml = String.concat ", " elements_paths_yaml in
+-  let elements_paths_array =
+-    List.map (
+-      fun e ->
+-        sprintf "[%s]=%s" e (quote (Hashtbl.find loaded_elements e).directory)
+-    ) (StringSet.elements all_elements) in
+-  let elements_paths_array = String.concat " " elements_paths_array in
+-
+-  let run_extra = sprintf "\
+-#!/bin/bash
+-set -e
+-%s
+-mount_dir=$1
+-shift
+-hooks_dir=$1
+-shift
+-target_dir=$1
+-shift
+-script=$1
+-shift
+-
+-VIRT_DIB_OURPATH=$(dirname $(realpath $0))
+-
+-# user variables
+-%s
+-
+-export PATH=%s:$PATH
+-
+-# d-i-b variables
+-export TMP_MOUNT_PATH=\"$mount_dir\"
+-export DIB_OFFLINE=%s
+-export IMAGE_NAME=\"%s\"
+-export DIB_ROOT_LABEL=\"%s\"
+-export DIB_IMAGE_ROOT_FS_UUID=%s
+-export DIB_IMAGE_CACHE=\"%s\"
+-export _LIB=%s
+-export ARCH=%s
+-export TMP_HOOKS_PATH=\"$hooks_dir\"
+-export DIB_ARGS=\"%s\"
+-export IMAGE_ELEMENT=\"%s\"
+-export ELEMENTS_PATH=\"%s\"
+-export DIB_ENV=%s
+-export TMPDIR=\"${TMP_MOUNT_PATH}/tmp\"
+-export TMP_DIR=\"${TMPDIR}\"
+-export DIB_DEBUG_TRACE=%d
+-export FS_TYPE=%s
+-export DIB_CHECKSUM=%s
+-export DIB_PYTHON_EXEC=%s
+-
+-elinfo_out=$(<${VIRT_DIB_OURPATH}/elinfo_out)
+-eval \"$elinfo_out\"
+-
+-ENVIRONMENT_D_DIR=$target_dir/../environment.d
+-
+-if [ -d $ENVIRONMENT_D_DIR ] ; then
+-    env_files=$(find $ENVIRONMENT_D_DIR -maxdepth 1 -xtype f | \
+-        grep -E \"/[0-9A-Za-z_\\.-]+$\" | \
+-        LANG=C sort -n)
+-    for env_file in $env_files ; do
+-        source $env_file
+-    done
+-fi
+-
+-source $_LIB/die
+-
+-$target_dir/$script
+-"
+-    (if debug >= 1 then "set -x\n" else "")
+-    (envvars_string envvars)
+-    fakebindir
+-    network_string
+-    out_name
+-    root_label
+-    rootfs_uuid
+-    image_cache
+-    (quote libdir)
+-    arch
+-    dib_args
+-    (String.concat " " (StringSet.elements all_elements))
+-    (String.concat ":" element_paths)
+-    (quote dib_vars)
+-    debug
+-    fs_type
+-    checksum_string
+-    python in
+-  write_script (destdir // "run-part-extra.sh") run_extra;
+-  let elinfo_out = sprintf "\
+-export IMAGE_ELEMENT_YAML=\"{%s}\"
+-function get_image_element_array {
+-  echo \"%s\"
+-};
+-export -f get_image_element_array;
+-"
+-    elements_paths_yaml
+-    elements_paths_array in
+-  write_script (destdir // "elinfo_out") elinfo_out
+-
+-let prepare_aux ~envvars ~dib_args ~dib_vars ~log_file ~out_name ~rootfs_uuid
+-  ~arch ~network ~root_label ~install_type ~debug ~extra_packages ~fs_type
+-  ~checksum destdir all_elements =
+-  let network_string = if network then "" else "1" in
+-  let checksum_string = if checksum then "1" else "" in
+-
+-  let script_run_part = sprintf "\
+-#!/bin/bash
+-set -e
+-%s
+-sysroot=$1
+-shift
+-mysysroot=$1
+-shift
+-blockdev=$1
+-shift
+-target_dir=$1
+-shift
+-new_wd=$1
+-shift
+-script=$1
+-shift
+-
+-# user variables
+-%s
+-
+-# system variables
+-export HOME=$mysysroot/tmp/in_target.aux/perm/home
+-export PATH=$mysysroot/tmp/in_target.aux/hooks/bin:$PATH
+-export TMP=$mysysroot/tmp
+-export TMPDIR=$TMP
+-export TMP_DIR=$TMP
+-
+-# d-i-b variables
+-export TMP_MOUNT_PATH=$sysroot
+-export TARGET_ROOT=$sysroot
+-export DIB_OFFLINE=%s
+-export IMAGE_NAME=\"%s\"
+-export DIB_IMAGE_ROOT_FS_UUID=%s
+-export DIB_IMAGE_CACHE=$HOME/.cache/image-create
+-export DIB_ROOT_LABEL=\"%s\"
+-export _LIB=$mysysroot/tmp/in_target.aux/lib
+-export _PREFIX=$mysysroot/tmp/in_target.aux/elements
+-export ARCH=%s
+-export TMP_HOOKS_PATH=$mysysroot/tmp/in_target.aux/hooks
+-export DIB_ARGS=\"%s\"
+-export DIB_MANIFEST_SAVE_DIR=\"$mysysroot/tmp/in_target.aux/out/${IMAGE_NAME}.d\"
+-export IMAGE_BLOCK_DEVICE=$blockdev
+-export IMAGE_BLOCK_DEVICE_WITHOUT_PART=$(echo ${IMAGE_BLOCK_DEVICE} | sed -e \"s|^\\(.*loop[0-9]*\\)p[0-9]*$|\\1|g\")
+-export IMAGE_ELEMENT=\"%s\"
+-export DIB_ENV=%s
+-export DIB_DEBUG_TRACE=%d
+-export DIB_NO_TMPFS=1
+-export FS_TYPE=%s
+-export DIB_CHECKSUM=%s
+-
+-export TMP_BUILD_DIR=$mysysroot/tmp/in_target.aux
+-export TMP_IMAGE_DIR=$mysysroot/tmp/in_target.aux
+-
+-if [ -n \"$mysysroot\" ]; then
+-  export PATH=$mysysroot/tmp/in_target.aux/fake-bin:$PATH
+-  source $_LIB/die
+-else
+-  export PATH=\"$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"
+-fi
+-
+-ENVIRONMENT_D_DIR=$target_dir/../environment.d
+-
+-if [ -d $ENVIRONMENT_D_DIR ] ; then
+-    env_files=$(find $ENVIRONMENT_D_DIR -maxdepth 1 -xtype f | \
+-        grep -E \"/[0-9A-Za-z_\\.-]+$\" | \
+-        LANG=C sort -n)
+-    for env_file in $env_files ; do
+-        source $env_file
+-    done
+-fi
+-
+-if [ -n \"$new_wd\" ]; then
+-  cd \"$mysysroot/$new_wd\"
+-fi
+-
+-$target_dir/$script
+-"
+-    (if debug >= 1 then "set -x\n" else "")
+-    (envvars_string envvars)
+-    network_string
+-    out_name
+-    rootfs_uuid
+-    root_label
+-    arch
+-    dib_args
+-    (String.concat " " (StringSet.elements all_elements))
+-    (quote dib_vars)
+-    debug
+-    fs_type
+-    checksum_string in
+-  write_script (destdir // "run-part.sh") script_run_part;
+-  let script_run_and_log = "\
+-#!/bin/bash
+-logfile=$1
+-shift
+-exec 3>&1
+-exit `( ( ( $(dirname $0)/run-part.sh \"$@\" ) 2>&1 3>&-; echo $? >&4) | tee -a $logfile >&3 >&2) 4>&1`
+-" in
+-  write_script (destdir // "run-and-log.sh") script_run_and_log;
+-
+-  (* Create the fake sudo support. *)
+-  do_mkdir (destdir // "fake-bin");
+-  let fake_sudo = "\
+-#!/bin/bash
+-set -e
+-
+-SCRIPTNAME=fake-sudo
+-
+-ARGS_SHORT=\"EHiu:\"
+-ARGS_LONG=\"\"
+-TEMP=`POSIXLY_CORRECT=1 getopt ${ARGS_SHORT:+-o $ARGS_SHORT} ${ARGS_LONG:+--long $ARGS_LONG} \
+-     -n \"$SCRIPTNAME\" -- \"$@\"`
+-if [ $? != 0 ]; then echo \"$SCRIPTNAME: terminating...\" >&2 ; exit 1 ; fi
+-eval set -- \"$TEMP\"
+-
+-preserve_env=
+-set_home=
+-login_shell=
+-user=
+-
+-while true; do
+-  case \"$1\" in
+-    -E) preserve_env=1; shift;;
+-    -H) set_home=1; shift;;
+-    -i) login_shell=1; shift;;
+-    -u) user=$2; shift 2;;
+-    --) shift; break;;
+-    *) echo \"$SCRIPTNAME: internal arguments error\"; exit 1;;
+-  esac
+-done
+-
+-if [ -n \"$user\" ]; then
+-  if [ $user != root -a $user != `whoami` ]; then
+-    echo \"$SCRIPTNAME: cannot use the sudo user $user, only root and $(whoami) handled\" >&2
+-    exit 1
+-  fi
+-fi
+-
+-if [ -z \"$preserve_env\" ]; then
+-  for envvar in `awk 'BEGIN{for (i in ENVIRON) {print i}}'`; do
+-    case \"$envvar\" in
+-      PATH | USER | USERNAME | HOSTNAME | TERM | LANG | HOME | SHELL | LOGNAME ) ;;
+-      BASH_FUNC_* ) unset -f $envvar ;;
+-      *) unset $envvar ;;
+-    esac
+-  done
+-fi
+-# TMPDIR needs to be unset, regardless of -E
+-unset TMPDIR
+-# ... and do that also to the other \"TMPDIR\"-like variables
+-unset TMP
+-unset TMP_DIR
+-
+-cmd=$1
+-shift
+-$cmd \"$@\"
+-" in
+-  write_script (destdir // "fake-bin" // "sudo") fake_sudo;
+-  (* Pick dib-run-parts from the host, if available, otherwise put
+-   * a fake executable which will error out if used.
+-   *)
+-  (try
+-    let loc = which "dib-run-parts" in
+-    do_cp loc (destdir // "fake-bin")
+-  with Executable_not_found _ ->
+-    let fake_dib_run_parts = "\
+-#!/bin/sh
+-echo \"Please install dib-run-parts on the host\"
+-exit 1
+-" in
+-    write_script (destdir // "fake-bin" // "dib-run-parts") fake_dib_run_parts;
+-  );
+-
+-  (* Write the custom hooks. *)
+-  let script_install_type_env = sprintf "\
+-export DIB_DEFAULT_INSTALLTYPE=${DIB_DEFAULT_INSTALLTYPE:-\"%s\"}
+-"
+-    install_type in
+-  write_script (destdir // "hooks" // "environment.d" // "11-dib-install-type.bash") script_install_type_env;
+-
+-  (* Write install-packages.sh if needed. *)
+-  if extra_packages <> [] then (
+-    let script_install_packages = sprintf "\
+-#!/bin/bash
+-install-packages %s
+-"
+-      (String.concat " " extra_packages) in
+-    write_script (destdir // "install-packages.sh") script_install_packages;
+-  );
+-
+-  do_mkdir (destdir // "perm")
+-
+-let timing_output ~target_name entries timings =
+-  let buf = Buffer.create 4096 in
+-  Buffer.add_string buf "----------------------- PROFILING -----------------------\n";
+-  Buffer.add_char buf '\n';
+-  bprintf buf "Target: %s\n" target_name;
+-  Buffer.add_char buf '\n';
+-  bprintf buf "%-40s %9s\n" "Script" "Seconds";
+-  bprintf buf "%-40s %9s\n" "---------------------------------------" "----------";
+-  Buffer.add_char buf '\n';
+-  List.iter (
+-    fun x ->
+-      bprintf buf "%-40s %10.3f\n" x (Hashtbl.find timings x);
+-  ) entries;
+-  Buffer.add_char buf '\n';
+-  Buffer.add_string buf "--------------------- END PROFILING ---------------------\n";
+-  Buffer.contents buf
+-
+-type sysroot_type =
+-  | In
+-  | Out
+-  | Subroot
+-
+-let timed_run fn =
+-  let time_before = Unix.gettimeofday () in
+-  fn ();
+-  let time_after = Unix.gettimeofday () in
+-  time_after -. time_before
+-
+-let run_parts ~debug ~sysroot ~blockdev ~log_file ?(new_wd = "")
+-  (g : Guestfs.guestfs) hook_name scripts =
+-  let hook_dir = "/tmp/in_target.aux/hooks/" ^ hook_name in
+-  let scripts = List.sort digit_prefix_compare scripts in
+-  let outbuf = Buffer.create 16384 in
+-  let timings = Hashtbl.create 13 in
+-  let new_wd =
+-    match sysroot, new_wd with
+-    | (Out|Subroot), "" -> "''"
+-    | (In|Out|Subroot), dir -> dir in
+-  List.iter (
+-    fun x ->
+-      message (f_"Running: %s/%s") hook_name x;
+-      g#write_append log_file (sprintf "Running %s/%s...\n" hook_name x);
+-      let out = ref "" in
+-      let run () =
+-        let outstr =
+-          match sysroot with
+-          | In ->
+-            g#sh (sprintf "/tmp/in_target.aux/run-and-log.sh '%s' '' '' '%s' '%s' '%s' '%s'" log_file blockdev hook_dir new_wd x)
+-          | Out ->
+-            g#debug "sh" [| "/sysroot/tmp/in_target.aux/run-and-log.sh"; "/sysroot" ^ log_file; "/sysroot"; "/sysroot"; blockdev; "/sysroot" ^ hook_dir; new_wd; x |]
+-          | Subroot ->
+-            g#debug "sh" [| "/sysroot/tmp/in_target.aux/run-and-log.sh"; "/sysroot" ^ log_file; "/sysroot/subroot"; "/sysroot"; blockdev; "/sysroot" ^ hook_dir; new_wd; x |] in
+-        out := outstr;
+-        Buffer.add_string outbuf outstr in
+-      let delta_t = timed_run run in
+-      Buffer.add_char outbuf '\n';
+-      out := ensure_trailing_newline !out;
+-      printf "%s%!" !out;
+-      if debug >= 1 then (
+-        printf "%s completed after %.3f s\n" x delta_t
+-      );
+-      Hashtbl.add timings x delta_t;
+-  ) scripts;
+-  g#write_append log_file (timing_output ~target_name:hook_name scripts timings);
+-  flush_all ();
+-  Buffer.contents outbuf
+-
+-let run_parts_host ~debug (g : Guestfs.guestfs) hook_name base_mount_dir scripts run_script =
+-  let scripts = List.sort digit_prefix_compare scripts in
+-  let mount_dir = base_mount_dir // hook_name in
+-  (* Point to the in-guest hooks, so that changes there can affect
+-   * other phases.
+-   *)
+-  let hooks_dir = mount_dir // "tmp" // "in_target.aux" // "hooks" in
+-  let hook_dir = hooks_dir // hook_name in
+-  do_mkdir mount_dir;
+-
+-  let rec fork_and_run () =
+-    let pid = Unix.fork () in
+-    if pid = 0 then ( (* child *)
+-      let retcode = run_scripts () in
+-      flush_all ();
+-      let cmd = [ "guestunmount"; mount_dir ] in
+-      ignore (run_command cmd);
+-      Exit._exit retcode
+-    );
+-    pid
+-  and run_scripts () =
+-    let timings = Hashtbl.create 13 in
+-    let rec loop = function
+-      | x :: xs ->
+-        message (f_"Running: %s/%s") hook_name x;
+-        let cmd = [ run_script; mount_dir; hooks_dir; hook_dir; x ] in
+-        let retcode = ref 0 in
+-        let run () =
+-          retcode := run_command cmd in
+-        let delta_t = timed_run run in
+-        if debug >= 1 then (
+-          printf "\n";
+-          printf "%s completed after %.3f s\n" x delta_t
+-        );
+-        Hashtbl.add timings x delta_t;
+-        let retcode = !retcode in
+-        if retcode <> 0 then retcode
+-        else loop xs
+-      | [] -> 0
+-    in
+-    let retcode = loop scripts in
+-    if debug >= 1 then (
+-      print_string (timing_output ~target_name:hook_name scripts timings)
+-    );
+-    retcode
+-  in
+-
+-  g#mount_local mount_dir;
+-  let pid = fork_and_run () in
+-  g#mount_local_run ();
+-
+-  (match snd (Unix.waitpid [] pid) with
+-  | Unix.WEXITED 0 -> ()
+-  | Unix.WEXITED i -> exit i
+-  | Unix.WSIGNALED i
+-  | Unix.WSTOPPED i ->
+-    error (f_"sub-process killed by signal (%d)") i
+-  );
+-
+-  flush_all ()
+-
+-let run_install_packages ~debug ~blockdev ~log_file
+-  (g : Guestfs.guestfs) packages =
+-  let pkgs_string = String.concat " " packages in
+-  message (f_"Installing: %s") pkgs_string;
+-  g#write_append log_file (sprintf "Installing %s...\n" pkgs_string);
+-  let out = g#sh (sprintf "/tmp/in_target.aux/run-and-log.sh '%s' '' '' '%s' '/tmp/in_target.aux' '' 'install-packages.sh'" log_file blockdev) in
+-  let out = ensure_trailing_newline out in
+-  if debug >= 1 then (
+-    printf "%s%!" out;
+-    printf "package installation completed\n";
+-  );
+-  flush_all ();
+-  out
+-
+-(* Finalize the list of output formats. *)
+-let () = Output_format.bake ()
+-
+-let main () =
+-  let cmdline = parse_cmdline () in
+-  let debug = cmdline.debug in
+-
+-  (* Check that the specified base directory of diskimage-builder
+-   * has the "die" script in it, so we know the directory is the
+-   * right one (hopefully so, at least).
+-   *)
+-  if not (Sys.file_exists (cmdline.basepath // "die")) then
+-    error (f_"the specified base path is not the diskimage-builder library");
+-
+-  (* Check for required tools. *)
+-  let python =
+-    match cmdline.python with
+-    | None -> get_required_tool "python"
+-    | Some exe -> exe in
+-  require_tool "uuidgen";
+-  Output_format.check_formats_prerequisites cmdline.formats;
+-  if cmdline.checksum then
+-    List.iter (fun x -> require_tool (tool_of_checksum x)) checksums;
+-
+-  let image_basename = Filename.basename cmdline.image_name in
+-  let image_basename_d = image_basename ^ ".d" in
+-
+-  let tmpdir = Mkdtemp.temp_dir "dib." in
+-  On_exit.rm_rf tmpdir;
+-  let auxtmpdir = tmpdir // "in_target.aux" in
+-  do_mkdir auxtmpdir;
+-  let hookstmpdir = auxtmpdir // "hooks" in
+-  do_mkdir (hookstmpdir // "environment.d");    (* Just like d-i-b does. *)
+-  do_mkdir (auxtmpdir // "out" // image_basename_d);
+-  let elements =
+-    if cmdline.use_base then ["base"] @ cmdline.elements
+-    else cmdline.elements in
+-  let elements =
+-    if cmdline.is_ramdisk then [cmdline.ramdisk_element] @ elements
+-    else elements in
+-  info (f_"Elements: %s") (String.concat " " elements);
+-  if debug >= 1 then (
+-    printf "tmpdir: %s\n" tmpdir;
+-    printf "element paths: %s\n" (String.concat ":" cmdline.element_paths);
+-  );
+-
+-  let loaded_elements = load_elements ~debug cmdline.element_paths in
+-  if debug >= 1 then (
+-    printf "loaded elements:\n";
+-    Hashtbl.iter (
+-      fun k v ->
+-        printf "  %s => %s\n" k v.directory;
+-        Hashtbl.iter (
+-          fun k v ->
+-            printf "\t%-20s %s\n" k (String.concat " " (List.sort compare v))
+-        ) v.hooks;
+-    ) loaded_elements;
+-    printf "\n";
+-  );
+-  let all_elements = load_dependencies elements loaded_elements in
+-  let all_elements = exclude_elements all_elements
+-    (cmdline.excluded_elements @ builtin_elements_blacklist) in
+-
+-  info (f_"Expanded elements: %s")
+-       (String.concat " " (StringSet.elements all_elements));
+-
+-  let envvars = read_envvars cmdline.envvars in
+-  info (f_"Carried environment variables: %s")
+-       (String.concat " " (List.map fst envvars));
+-  if debug >= 1 then (
+-    printf "carried over envvars:\n";
+-    if envvars <> [] then
+-      List.iter (
+-        fun (var, value) ->
+-          printf "  %s=%s\n" var value
+-      ) envvars
+-    else
+-      printf "  (none)\n";
+-    printf "\n";
+-  );
+-  let dib_args = stringify_args (Array.to_list Sys.argv) in
+-  let dib_vars = read_dib_envvars () in
+-  if debug >= 1 then (
+-    printf "DIB args:\n%s\n" dib_args;
+-    printf "DIB envvars:\n%s\n" dib_vars
+-  );
+-
+-  message (f_"Preparing auxiliary data");
+-
+-  copy_elements all_elements loaded_elements
+-    (cmdline.excluded_scripts @ builtin_scripts_blacklist) hookstmpdir;
+-
+-  (* Re-read the hook scripts from the hooks dir, as d-i-b (and we too)
+-   * has basically copied over anything found in elements.
+-   *)
+-  let final_hooks = load_hooks ~debug hookstmpdir in
+-
+-  let log_file = "/tmp/in_target.aux/perm/" ^ (log_filename ()) in
+-
+-  let arch =
+-    match cmdline.arch with
+-    | "" -> current_arch ()
+-    | arch -> arch in
+-
+-  let root_label =
+-    match cmdline.root_label with
+-    | None ->
+-      (* XFS has a limit of 12 characters for filesystem labels.
+-       * Not changing the default for other filesystems to maintain
+-       * backwards compatibility.
+-       *)
+-      (match cmdline.fs_type with
+-      | "xfs" -> "img-rootfs"
+-      | _ -> "cloudimg-rootfs")
+-    | Some label -> label in
+-
+-  let image_cache =
+-    match cmdline.image_cache with
+-    | None -> Sys.getenv "HOME" // ".cache" // "image-create"
+-    | Some dir -> dir in
+-  do_mkdir image_cache;
+-
+-  let rootfs_uuid = uuidgen () in
+-
+-  prepare_aux ~envvars ~dib_args ~dib_vars ~log_file ~out_name:image_basename
+-              ~rootfs_uuid ~arch ~network:cmdline.network ~root_label
+-              ~install_type:cmdline.install_type ~debug
+-              ~extra_packages:cmdline.extra_packages
+-              ~fs_type:cmdline.fs_type
+-              ~checksum:cmdline.checksum
+-              auxtmpdir all_elements;
+-
+-  let delete_output_file = ref cmdline.delete_on_failure in
+-  let delete_file () =
+-    if !delete_output_file then (
+-      let filenames = Output_format.get_filenames cmdline.formats cmdline.image_name in
+-      List.iter (
+-        fun fn ->
+-          try Unix.unlink fn with _ -> ()
+-      ) filenames
+-    )
+-  in
+-  at_exit delete_file;
+-
+-  prepare_external ~envvars ~dib_args ~dib_vars ~out_name:image_basename
+-                   ~root_label ~rootfs_uuid ~image_cache ~arch
+-                   ~network:cmdline.network ~debug
+-                   ~fs_type:cmdline.fs_type
+-                   ~checksum:cmdline.checksum
+-                   ~python
+-                   tmpdir cmdline.basepath
+-                   (auxtmpdir // "fake-bin")
+-                   loaded_elements all_elements cmdline.element_paths;
+-
+-  let run_hook ~blockdev ~sysroot ?(new_wd = "") (g : Guestfs.guestfs) hook =
+-    try
+-      let scripts =
+-        (* Sadly, scripts (especially in root.d and extra-data.d)
+-         * can add (by copying or symlinking) new scripts for other
+-         * phases, which would be ignored if we were using the lists
+-         * collected after composing the tree of hooks.
+-         * As result, when running in-chroot hooks, re-read the list
+-         * of scripts actually available for each hook.
+-         *)
+-        match hook with
+-        | "pre-install.d" | "install.d" | "post-install.d" | "finalise.d" ->
+-          let scripts_path = "/tmp/in_target.aux/hooks/" ^ hook in
+-          (* Cleanly handle cases when the phase directory does not exist. *)
+-          if g#is_dir ~followsymlinks:true scripts_path then
+-            load_scripts g scripts_path
+-          else
+-            raise Not_found
+-        | _ ->
+-          Hashtbl.find final_hooks hook in
+-      if debug >= 1 then (
+-        printf "Running hooks for %s...\n%!" hook;
+-      );
+-      run_parts ~debug ~sysroot ~blockdev ~log_file ~new_wd g hook scripts
+-    with Not_found -> "" in
+-
+-  let copy_in (g : Guestfs.guestfs) srcdir destdir =
+-    let desttar = Filename.temp_file ~temp_dir:tmpdir "virt-dib." ".tar.gz" in
+-    let cmd = [ "tar"; "czf"; desttar; "-C"; srcdir; "--owner=root";
+-                "--group=root"; "." ] in
+-    if run_command cmd <> 0 then exit 1;
+-    g#mkdir_p destdir;
+-    g#tar_in ~compress:"gzip" desttar destdir;
+-    Sys.remove desttar in
+-
+-  if debug >= 1 then
+-    ignore (run_command [ "tree"; "-ps"; tmpdir ]);
+-
+-  message (f_"Opening the disks");
+-
+-  let is_ramdisk_build =
+-    cmdline.is_ramdisk || StringSet.mem "ironic-agent" all_elements in
+-
+-  let g, tmpdisk, tmpdiskfmt, drive_partition =
+-    let g = open_guestfs () in
+-    Option.iter g#set_memsize cmdline.memsize;
+-    Option.iter g#set_smp cmdline.smp;
+-    g#set_network cmdline.network;
+-
+-    (* Main disk with the built image. *)
+-    let fmt = "raw" in
+-    let fn =
+-      (* If "raw" is among the selected outputs, use it as main backing
+-       * disk, otherwise create a temporary disk.
+-       *)
+-      if not is_ramdisk_build && Output_format.set_mem "raw" cmdline.formats then
+-        cmdline.image_name
+-      else
+-        Filename.temp_file ~temp_dir:tmpdir "image." "" in
+-    let fn = output_filename fn fmt in
+-    (* Produce the output image. *)
+-    g#disk_create fn fmt cmdline.size;
+-    g#add_drive ~readonly:false ~format:fmt fn;
+-
+-    (* Helper drive for elements and binaries. *)
+-    g#add_drive_scratch (unit_GB 5);
+-
+-    (match cmdline.drive with
+-    | None ->
+-      g#add_drive_scratch (unit_GB 5)
+-    | Some drive ->
+-      g#add_drive ?format:cmdline.drive_format drive;
+-    );
+-
+-    g#launch ();
+-
+-    Output_format.check_formats_appliance_prerequisites cmdline.formats g;
+-
+-    (* Prepare the /in_target.aux partition. *)
+-    g#mkfs "ext2" "/dev/sdb";
+-    g#mount "/dev/sdb" "/";
+-
+-    copy_in g auxtmpdir "/";
+-    copy_in g cmdline.basepath "/lib";
+-    g#umount "/";
+-
+-    (* Prepare the /in_target.aux/perm partition. *)
+-    let drive_partition =
+-      match cmdline.drive with
+-      | None ->
+-        g#mkfs "ext2" "/dev/sdc";
+-        "/dev/sdc"
+-      | Some _ ->
+-        let partitions = Array.to_list (g#list_partitions ()) in
+-        (match partitions with
+-        | [] -> "/dev/sdc"
+-        | p ->
+-          let p = List.filter (fun x -> String.is_prefix x "/dev/sdc") p in
+-          if p = [] then
+-            error (f_"no partitions found in the helper drive");
+-          List.hd p
+-        ) in
+-    g#mount drive_partition "/";
+-    g#mkdir_p "/home/.cache/image-create";
+-    g#umount "/";
+-
+-    g, fn, fmt, drive_partition in
+-
+-  let mount_aux () =
+-    g#mkmountpoint "/tmp/in_target.aux";
+-    g#mount "/dev/sdb" "/tmp/in_target.aux";
+-    g#mount drive_partition "/tmp/in_target.aux/perm" in
+-
+-  (* Small kludge: try to umount all first: if that fails, use lsof and fuser
+-   * to find out what might have caused the failure, run udevadm to try
+-   * to settle things down (udev, you never know), and try umount all again.
+-   *)
+-  let checked_umount_all () =
+-    try g#umount_all ()
+-    with G.Error _ ->
+-      if debug >= 1 then (
+-        (try printf "lsof:\n%s\nEND\n" (g#debug "sh" [| "lsof"; "/sysroot"; |]) with _ -> ());
+-        (try printf "fuser:\n%s\nEND\n" (g#debug "sh" [| "fuser"; "-v"; "-m"; "/sysroot"; |]) with _ -> ());
+-        (try printf "losetup:\n%s\nEND\n" (g#debug "sh" [| "losetup"; "--list"; "--all" |]) with _ -> ());
+-      );
+-      ignore (g#debug "sh" [| "udevadm"; "--debug"; "settle" |]);
+-      g#umount_all () in
+-
+-  g#mkmountpoint "/tmp";
+-  mount_aux ();
+-
+-  let blockdev =
+-    (* Setup a loopback device, just like d-i-b would tie an image in the host
+-     * environment.
+-     *)
+-    let run_losetup device =
+-      let lines = g#debug "sh" [| "losetup"; "--show"; "-f"; device |] in
+-      let lines = String.nsplit "\n" lines in
+-      let lines = List.filter ((<>) "") lines in
+-      (match lines with
+-      | [] -> device
+-      | x :: _ -> x
+-      ) in
+-    let blockdev = run_losetup "/dev/sda" in
+-
+-    let run_hook_out_eval hook envvar =
+-      let lines = run_hook ~sysroot:Out ~blockdev g hook in
+-      let lines = String.nsplit "\n" lines in
+-      let lines = List.filter ((<>) "") lines in
+-      if lines = [] then None
+-      else (try Some (var_from_lines envvar lines) with _ -> None) in
+-
+-    (match run_hook_out_eval "block-device.d" "IMAGE_BLOCK_DEVICE" with
+-    | None -> blockdev
+-    | Some x -> x
+-    ) in
+-
+-  let rec run_hook_out ?(new_wd = "") hook =
+-    do_run_hooks_noout ~sysroot:Out ~new_wd hook
+-  and run_hook_in hook =
+-    do_run_hooks_noout ~sysroot:In hook
+-  and run_hook_subroot hook =
+-    do_run_hooks_noout ~sysroot:Subroot hook
+-  and do_run_hooks_noout ~sysroot ?(new_wd = "") hook =
+-    ignore (run_hook ~sysroot ~blockdev ~new_wd g hook)
+-  and run_hook_host hook =
+-    try
+-      let scripts = Hashtbl.find final_hooks hook in
+-      if debug >= 1 then (
+-        printf "Running hooks for %s...\n%!" hook;
+-      );
+-      run_parts_host ~debug g hook tmpdir scripts
+-        (tmpdir // "run-part-extra.sh")
+-    with Not_found -> () in
+-
+-  g#sync ();
+-  checked_umount_all ();
+-  flush_all ();
+-
+-  message (f_"Setting up the destination root");
+-
+-  (* Create and mount the target filesystem. *)
+-  let mkfs_options =
+-    match cmdline.mkfs_options with
+-    | None -> []
+-    | Some o -> [ o ] in
+-  let mkfs_options =
+-    [ "-t"; cmdline.fs_type ] @
+-    (match cmdline.fs_type with
+-    | "ext4" ->
+-      (* Very conservative to handle images being resized a lot
+-       * Without -J option specified, default journal size will be set to 32M
+-       * and online resize will be failed with error of needs too many credits.
+-       *)
+-      [ "-i"; "4096"; "-J"; "size=64" ]
+-    | _ -> []
+-    ) @ mkfs_options @ [ blockdev ] in
+-  ignore (g#debug "sh" (Array.of_list ([ "mkfs" ] @ mkfs_options)));
+-  g#set_label blockdev root_label;
+-  if String.is_prefix cmdline.fs_type "ext" then
+-    g#set_uuid blockdev rootfs_uuid;
+-  g#mount blockdev "/";
+-  g#mkmountpoint "/tmp";
+-  mount_aux ();
+-  g#mkdir "/subroot";
+-
+-  run_hook_subroot "root.d";
+-
+-  g#sync ();
+-  g#umount "/tmp/in_target.aux/perm";
+-  g#umount "/tmp/in_target.aux";
+-  g#rm_rf "/tmp";
+-  let subroot_items =
+-    let l = Array.to_list (g#ls "/subroot") in
+-    let l_lost_plus_found, l = List.partition ((=) "lost+found") l in
+-    if l_lost_plus_found <> [] then (
+-      g#rm_rf "/subroot/lost+found";
+-    );
+-    l in
+-  List.iter (fun x -> g#mv ("/subroot/" ^ x) ("/" ^ x)) subroot_items;
+-  g#rmdir "/subroot";
+-  (* Check /tmp exists already. *)
+-  ignore (g#is_dir "/tmp");
+-  mount_aux ();
+-  g#ln_s "in_target.aux/hooks" "/tmp/in_target.d";
+-
+-  run_hook_host "extra-data.d";
+-
+-  run_hook_in "pre-install.d";
+-
+-  if cmdline.extra_packages <> [] then
+-    ignore (run_install_packages ~debug ~blockdev ~log_file g
+-                                 cmdline.extra_packages);
+-
+-  run_hook_in "install.d";
+-
+-  run_hook_in "post-install.d";
+-
+-  (* Unmount and remount the image, as d-i-b does at this point too. *)
+-  g#sync ();
+-  checked_umount_all ();
+-  flush_all ();
+-  g#mount blockdev "/";
+-  (* Check /tmp/in_target.aux still exists. *)
+-  ignore (g#is_dir "/tmp/in_target.aux");
+-  g#mount "/dev/sdb" "/tmp/in_target.aux";
+-  g#mount drive_partition "/tmp/in_target.aux/perm";
+-
+-  run_hook_in "finalise.d";
+-
+-  let out_dir = "/tmp/in_target.aux/out/" ^ image_basename_d in
+-
+-  run_hook_out ~new_wd:out_dir "cleanup.d";
+-
+-  g#sync ();
+-
+-  if g#ls out_dir <> [||] then (
+-    message (f_"Extracting data out of the image");
+-    do_mkdir (cmdline.image_name ^ ".d");
+-    g#copy_out out_dir (Filename.dirname cmdline.image_name);
+-  );
+-
+-  (* Unmount everything, and remount only the root to cleanup
+-   * its /tmp; this way we should be pretty sure that there is
+-   * nothing left mounted over /tmp, so it is safe to empty it.
+-   *)
+-  checked_umount_all ();
+-  flush_all ();
+-  g#mount blockdev "/";
+-  Array.iter (fun x -> g#rm_rf ("/tmp/" ^ x)) (g#ls "/tmp");
+-  (* Truncate /var/log files in preparation for first boot. *)
+-  truncate_recursive g "/var/log";
+-  let non_log fn =
+-    not (String.is_suffix fn ".log")
+-  in
+-  (* Remove root logs. *)
+-  rm_rf_only_files g ~filter:non_log "/root";
+-
+-  flush_all ();
+-
+-  Output_format.run_formats_on_filesystem cmdline.formats g cmdline.image_name tmpdir;
+-
+-  message (f_"Umounting the disks");
+-
+-  (* Now that we've finished the build, don't delete the output file on
+-   * exit.
+-   *)
+-  delete_output_file := false;
+-
+-  g#sync ();
+-  checked_umount_all ();
+-  g#shutdown ();
+-  g#close ();
+-
+-  flush_all ();
+-
+-  (* Don't produce images as output when doing a ramdisk build. *)
+-  if not is_ramdisk_build then
+-    Output_format.run_formats_on_file cmdline.formats cmdline.image_name (tmpdisk, tmpdiskfmt) tmpdir;
+-
+-  if not is_ramdisk_build && cmdline.checksum then (
+-    let file_flags = [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC; ] in
+-    let filenames = Output_format.get_filenames cmdline.formats cmdline.image_name in
+-    List.iter (
+-      fun fn ->
+-        message (f_"Generating checksums for %s") fn;
+-        let cmds =
+-          List.map (
+-            fun csum ->
+-              let csum_fn = fn ^ "." ^ csum in
+-              let csum_tool = tool_of_checksum csum in
+-              let outfd = Unix.openfile csum_fn file_flags 0o640 in
+-              [ csum_tool; fn ], Some outfd, None
+-          ) checksums in
+-        let res = run_commands cmds in
+-        List.iteri (
+-          fun i code ->
+-            if code <> 0 then (
+-              let args, _, _ = List.nth cmds i in
+-              error (f_"external command ‘%s’ exited with error %d")
+-                (List.hd args) code
+-            )
+-        ) res;
+-    ) filenames;
+-  );
+-
+-  message (f_"Done")
+-
+-let () = run_main_and_handle_errors main
+diff --git a/dib/dib.mli b/dib/dib.mli
+deleted file mode 100644
+index 84aa4fcdb..000000000
+--- a/dib/dib.mli
++++ /dev/null
+@@ -1,19 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2015 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-(* Nothing is exported. *)
+diff --git a/dib/dummy.c b/dib/dummy.c
+deleted file mode 100644
+index ebab6198c..000000000
+--- a/dib/dummy.c
++++ /dev/null
+@@ -1,2 +0,0 @@
+-/* Dummy source, to be used for OCaml-based tools with no C sources. */
+-enum { foo = 1 };
+diff --git a/dib/elements.ml b/dib/elements.ml
+deleted file mode 100644
+index 5a904baef..000000000
+--- a/dib/elements.ml
++++ /dev/null
+@@ -1,207 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2015 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-(* Parsing and handling of elements. *)
+-
+-open Std_utils
+-open Tools_utils
+-open Common_gettext.Gettext
+-
+-open Utils
+-
+-open Printf
+-
+-type element = {
+-  directory : string;
+-  hooks : hooks_map;
+-}
+-and hooks_map = (string, string list) Hashtbl.t  (* hook name, scripts *)
+-
+-exception Duplicate_script of string * string (* hook, script *)
+-
+-let builtin_elements_blacklist = [
+-]
+-
+-let builtin_scripts_blacklist = [
+-  "01-sahara-version";            (* Gets the Git commit ID of the d-i-b and
+-                                   * sahara-image-elements repositories. *)
+-]
+-
+-let valid_script_name n =
+-  let is_char_valid = function
+-    | 'A'..'Z' | 'a'..'z' | '0'..'9' | '_' | '-' -> true
+-    | _ -> false in
+-  try ignore (string_index_fn (fun c -> not (is_char_valid c)) n); false
+-  with Not_found -> true
+-
+-let stringset_of_list l =
+-  List.fold_left (fun acc x -> StringSet.add x acc) StringSet.empty l
+-
+-let load_hooks ~debug path =
+-  let hooks = Hashtbl.create 13 in
+-  let entries = Array.to_list (Sys.readdir path) in
+-  let entries = List.filter (fun x -> Filename.check_suffix x ".d") entries in
+-  let entries = List.map (fun x -> (x, path // x)) entries in
+-  let entries = List.filter (fun (_, x) -> is_directory x) entries in
+-  List.iter (
+-    fun (hook, p) ->
+-      let listing = Array.to_list (Sys.readdir p) in
+-      let scripts = List.filter valid_script_name listing in
+-      let scripts = List.filter (
+-        fun x ->
+-          try
+-            let s = Unix.stat (p // x) in
+-            s.Unix.st_kind = Unix.S_REG && s.Unix.st_perm land 0o111 > 0
+-          with Unix.Unix_error _ -> false
+-      ) scripts in
+-      if scripts <> [] then
+-        Hashtbl.add hooks hook scripts
+-  ) entries;
+-  hooks
+-
+-let load_scripts (g : Guestfs.guestfs) path =
+-  let listing = Array.to_list (g#readdir path) in
+-  let scripts = List.filter (
+-    function
+-    | { Guestfs.ftyp = ('r'|'l'|'u'|'?') } -> true
+-    | _ -> false
+-    ) listing in
+-  let scripts = List.filter (fun x -> valid_script_name x.Guestfs.name) scripts in
+-  List.filter_map (
+-     fun x ->
+-       let { Guestfs.st_mode = mode } = g#statns (path ^ "/" ^ x.Guestfs.name) in
+-       if mode &^ 0o111_L > 0_L then Some x.Guestfs.name
+-       else None
+-   ) scripts
+-
+-let load_elements ~debug paths =
+-  let loaded_elements = Hashtbl.create 13 in
+-  let paths = List.filter is_directory paths in
+-  List.iter (
+-    fun path ->
+-      let listing = Array.to_list (Sys.readdir path) in
+-      let listing = List.map (fun x -> (x, path // x)) listing in
+-      let listing = List.filter (fun (_, x) -> is_directory x) listing in
+-      List.iter (
+-        fun (p, dir) ->
+-          if not (Hashtbl.mem loaded_elements p) then (
+-            let elem = { directory = dir; hooks = load_hooks ~debug dir } in
+-            Hashtbl.add loaded_elements p elem
+-          ) else if debug >= 1 then (
+-            printf "element %s (in %s) already present" p path;
+-          )
+-      ) listing
+-  ) paths;
+-  loaded_elements
+-
+-let load_dependencies elements loaded_elements =
+-  let get filename element =
+-    try
+-      let path = (Hashtbl.find loaded_elements element).directory in
+-      let path = path // filename in
+-      if Sys.file_exists path then (
+-        let lines = read_whole_file path in
+-        let lines = String.nsplit "\n" lines in
+-        let lines = List.filter ((<>) "") lines in
+-        stringset_of_list lines
+-      ) else
+-        StringSet.empty
+-    with Not_found ->
+-      error (f_"element %s not found") element in
+-  let get_deps = get "element-deps" in
+-  let get_provides = get "element-provides" in
+-
+-  let queue = Queue.create () in
+-  let final = ref StringSet.empty in
+-  let provided = ref StringSet.empty in
+-  let provided_by = Hashtbl.create 13 in
+-  List.iter (fun x -> Queue.push x queue) elements;
+-  final := stringset_of_list elements;
+-  while not (Queue.is_empty queue) do
+-    let elem = Queue.pop queue in
+-    if StringSet.mem elem !provided <> true then (
+-      let element_deps = get_deps elem in
+-      let element_provides = get_provides elem in
+-      (* Save which elements provide another element for potential
+-       * error message.
+-       *)
+-      StringSet.iter (fun x -> Hashtbl.add provided_by x elem) element_provides;
+-      provided := StringSet.union !provided element_provides;
+-      StringSet.iter (fun x -> Queue.push x queue)
+-        (StringSet.diff element_deps (StringSet.union !final !provided));
+-      final := StringSet.union !final element_deps
+-    )
+-  done;
+-  let conflicts = StringSet.inter (stringset_of_list elements) !provided in
+-  if not (StringSet.is_empty conflicts) then (
+-    let buf = Buffer.create 100 in
+-    StringSet.iter (
+-      fun elem ->
+-        let s = sprintf (f_"  %s: already provided by %s")
+-                  elem (Hashtbl.find provided_by elem) in
+-        Buffer.add_string buf s
+-    ) conflicts;
+-    error (f_"following elements are already provided by another element:\n%s")
+-      (Buffer.contents buf)
+-  );
+-  if not (StringSet.mem "operating-system" !provided) then
+-    error (f_"please include an operating system element");
+-  StringSet.diff !final !provided
+-
+-let copy_element element destdir blacklist =
+-  let entries = Array.to_list (Sys.readdir element.directory) in
+-  let entries = List.filter ((<>) "tests") entries in
+-  let entries = List.filter ((<>) "test-elements") entries in
+-  let dirs, nondirs = List.partition is_directory entries in
+-  let dirs = List.map (fun x -> (x, element.directory // x, destdir // x)) dirs in
+-  let nondirs = List.map (fun x -> element.directory // x) nondirs in
+-  List.iter (
+-    fun (e, path, destpath) ->
+-      do_mkdir destpath;
+-      let subentries = Array.to_list (Sys.readdir path) in
+-      let subentries = List.filter (not_in_list blacklist) subentries in
+-      List.iter (
+-        fun sube ->
+-          if is_regular_file (destpath // sube) then (
+-            raise (Duplicate_script (e, sube))
+-          ) else
+-            do_cp (path // sube) destpath
+-      ) subentries;
+-  ) dirs;
+-  List.iter (
+-    fun path ->
+-      do_cp path destdir
+-  ) nondirs
+-
+-let copy_elements elements loaded_elements blacklist destdir =
+-  do_mkdir destdir;
+-  StringSet.iter (
+-    fun element ->
+-      try
+-        copy_element (Hashtbl.find loaded_elements element) destdir blacklist
+-      with
+-      | Duplicate_script (hook, script) ->
+-        let element_has_script e =
+-          try
+-            let s = Hashtbl.find (Hashtbl.find loaded_elements e).hooks hook in
+-            List.exists ((=) script) s
+-          with Not_found -> false in
+-        let dups = StringSet.filter element_has_script elements in
+-        error (f_"There is a duplicated script in your elements:\n%s/%s in: %s")
+-          hook script (String.concat " " (StringSet.elements dups))
+-  ) elements
+diff --git a/dib/elements.mli b/dib/elements.mli
+deleted file mode 100644
+index f351afeff..000000000
+--- a/dib/elements.mli
++++ /dev/null
+@@ -1,61 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2015 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-(** Parsing and handling of elements. *)
+-
+-type element = {
+-  directory : string;           (** directory of the element *)
+-  hooks : hooks_map;            (** available hooks, and scripts for each hook*)
+-}
+-and hooks_map = (string, string list) Hashtbl.t (** hook name, scripts *)
+-
+-val builtin_elements_blacklist : string list
+-(** These are the elements which we don't ever try to use. *)
+-
+-val builtin_scripts_blacklist : string list
+-(** These are the scripts which we don't ever try to run.
+-
+-    Usual reason could be that they are not compatible the way
+-    virt-dib works, e.g. they expect the tree of elements outside
+-    the chroot, which is not available in the appliance. *)
+-
+-val load_elements : debug:int -> string list -> (string, element) Hashtbl.t
+-(** [load_elements ~debug paths] loads elements from the specified
+-    [paths]; returns a [Hashtbl.t] of {!element} structs indexed by
+-    the element name. *)
+-
+-val load_dependencies : StringSet.elt list -> (string, element) Hashtbl.t -> StringSet.t
+-(** [load_dependencies element_set elements] returns the whole set of
+-    elements needed to use [element_set], including [element_list]
+-    themselves.  In other words, this recursively resolves the
+-    dependencies of [element_set]. *)
+-
+-val copy_elements : StringSet.t -> (string, element) Hashtbl.t -> string list -> string -> unit
+-(** [copy_elements element_set elements blacklisted_scripts destdir]
+-    copies the elements in [element_set] (with the element definitions
+-    provided as [elements]) into the [destdir] directory.
+-
+-    [blacklisted_scripts] contains names of scripts to never copy. *)
+-
+-val load_hooks : debug:int -> string -> hooks_map
+-(** [load_hooks ~debug path] loads the hooks from the specified
+-    [path] (which usually represents an element). *)
+-
+-val load_scripts : Guestfs.guestfs -> string -> string list
+-(** [load_scripts g path] loads the scripts from the specified [path]
+-    (which usually represents a directory of an hook). *)
+diff --git a/dib/output_format.ml b/dib/output_format.ml
+deleted file mode 100644
+index 247f33540..000000000
+--- a/dib/output_format.ml
++++ /dev/null
+@@ -1,192 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2012-2023 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-open Std_utils
+-open Tools_utils
+-open Common_gettext.Gettext
+-open Getopt.OptionName
+-
+-open Utils
+-
+-type format = {
+-  name : string;
+-  extra_args : extra_arg list;
+-  output_to_file : bool;
+-  check_prerequisites : (unit -> unit) option;
+-  check_appliance_prerequisites : (Guestfs.guestfs -> unit) option;
+-  run_on_filesystem : (Guestfs.guestfs -> string -> string -> unit) option;
+-  run_on_file : (string -> (string * string) -> string -> unit) option;
+-}
+-and extra_arg = {
+-  extra_argspec : Getopt.keys * Getopt.spec * Getopt.doc;
+-}
+-
+-let defaults = {
+-  name = "";
+-  extra_args = [];
+-  output_to_file = true;
+-  check_prerequisites = None;
+-  check_appliance_prerequisites = None;
+-  run_on_filesystem = None;
+-  run_on_file = None;
+-}
+-
+-let all_formats = ref []
+-
+-module FormatSet = Set.Make (
+-  struct
+-    type t = format
+-    let compare a b = compare a.name b.name
+-  end
+-)
+-type set = FormatSet.t
+-
+-let empty_set = FormatSet.empty
+-
+-let add_to_set name set =
+-  let op = List.find (fun { name = n } -> name = n) !all_formats in
+-  FormatSet.add op set
+-
+-let set_mem x set =
+-  FormatSet.exists (fun { name = n } -> n = x) set
+-
+-let set_cardinal set =
+-  FormatSet.cardinal set
+-
+-let register_format op =
+-  List.push_front op all_formats
+-
+-let baked = ref false
+-let rec bake () =
+-  (* Note we actually want all_formats to be sorted by name,
+-   * ignoring the order field.
+-   *)
+-  let ops =
+-    List.sort (fun { name = a } { name = b } -> compare a b) !all_formats in
+-  check_no_dupes ops;
+-  List.iter check ops;
+-  all_formats := ops;
+-  baked := true
+-and check_no_dupes ops =
+-  ignore (
+-    List.fold_left (
+-      fun opset op ->
+-        if FormatSet.mem op opset then
+-          error (f_"duplicate format name (%s)") op.name;
+-        add_to_set op.name opset
+-    ) empty_set ops
+-  )
+-and check op =
+-  let n = String.length op.name in
+-  if n = 0 then
+-    error (f_"format name is an empty string");
+-  for i = 0 to n-1 do
+-    match String.unsafe_get op.name i with
+-    | 'a'..'z' | 'A'..'Z' | '0'..'9' | '-' -> ()
+-    | c ->
+-      error (f_"disallowed character (%c) in format name") c
+-  done
+-
+-let extra_args () =
+-  assert !baked;
+-
+-  List.flatten (
+-    List.map (fun { extra_args } ->
+-      List.map (fun { extra_argspec = argspec } -> argspec) extra_args
+-    ) !all_formats
+-  )
+-
+-let list_formats () =
+-  assert !baked;
+-
+-  List.map (fun { name = n } -> n) !all_formats
+-
+-let compare_formats { name = n1 } { name = n2 } =
+-  compare n1 n2
+-
+-let check_formats_prerequisites ~formats =
+-  assert !baked;
+-
+-  (* Run the formats in alphabetical, rather than random order. *)
+-  let formats = List.sort compare_formats (FormatSet.elements formats) in
+-
+-  List.iter (
+-    function
+-    | { check_prerequisites = Some fn } ->
+-      fn ()
+-    | { check_prerequisites = None } -> ()
+-  ) formats
+-
+-let check_formats_appliance_prerequisites ~formats g =
+-  assert !baked;
+-
+-  (* Run the formats in alphabetical, rather than random order. *)
+-  let formats = List.sort compare_formats (FormatSet.elements formats) in
+-
+-  List.iter (
+-    function
+-    | { check_appliance_prerequisites = Some fn } ->
+-      fn g
+-    | { check_appliance_prerequisites = None } -> ()
+-  ) formats
+-
+-let run_formats_on_filesystem ~formats g image_name tmpdir =
+-  assert !baked;
+-
+-  (* Run the formats in alphabetical, rather than random order. *)
+-  let formats = List.sort compare_formats (FormatSet.elements formats) in
+-
+-  List.iter (
+-    function
+-    | { run_on_filesystem = Some fn; name; output_to_file } ->
+-      let filename =
+-        if output_to_file then output_filename image_name name
+-        else "" in
+-      fn g filename tmpdir
+-    | { run_on_filesystem = None } -> ()
+-  ) formats
+-
+-let run_formats_on_file ~formats image_name tmpdisk tmpdir  =
+-  assert !baked;
+-
+-  (* Run the formats in alphabetical, rather than random order. *)
+-  let formats = List.sort compare_formats (FormatSet.elements formats) in
+-
+-  List.iter (
+-    function
+-    | { run_on_file = Some fn; name; output_to_file } ->
+-      let filename =
+-        if output_to_file then output_filename image_name name
+-        else "" in
+-      fn filename tmpdisk tmpdir
+-    | { run_on_file = None } -> ()
+-  ) formats
+-
+-let get_filenames ~formats image_name =
+-  assert !baked;
+-
+-  (* Run the formats in alphabetical, rather than random order. *)
+-  let formats = List.sort compare_formats (FormatSet.elements formats) in
+-
+-  List.filter_map (
+-    function
+-    | { output_to_file = true; name } ->
+-      Some (output_filename image_name name)
+-    | { output_to_file = false } ->
+-      None
+-  ) formats
+diff --git a/dib/output_format.mli b/dib/output_format.mli
+deleted file mode 100644
+index d545891b1..000000000
+--- a/dib/output_format.mli
++++ /dev/null
+@@ -1,131 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2012-2023 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-(** Handling of output formats. *)
+-
+-(** Structure used to describe output formats. *)
+-type format = {
+-  name : string;
+-  (** The name of the format, which is exposed via the [--formats]
+-      command line parameter.  Must contain only alphanumeric and
+-      '-' (dash) character. *)
+-
+-  extra_args : extra_arg list;
+-  (** Extra command-line arguments, if any.  eg. The [docker]
+-      format has an extra [--docker-target] parameter.
+-
+-      For a description of each list element, see {!extra_arg} below.
+-
+-      You can decide the types of the arguments, whether they are
+-      mandatory etc. *)
+-
+-  output_to_file : bool;
+-  (** Whether the format writes to a file.  Most of the formats
+-      produce a file as result, although some (e.g. docker) do
+-      not. *)
+-
+-  check_prerequisites : (unit -> unit) option;
+-  (** The function which is called after the command line processing
+-      to check whether the requirements for this format (available
+-      tools, values for command line arguments, etc) are fulfilled. *)
+-
+-  check_appliance_prerequisites : (Guestfs.guestfs -> unit) option;
+-  (** The function which is called after the appliance start to check
+-      whether the requirements in the appliance for this format
+-      (available features, filesystems, etc) are fulfilled. *)
+-
+-  run_on_filesystem : (Guestfs.guestfs -> string -> string -> unit) option;
+-  (** The function which is called to perform the export while the
+-      guest is mounted.
+-
+-      The parameters are:
+-      - [g]: the libguestfs handle
+-      - [filename]: the output filename for the format, or an empty
+-        string if {!output_to_file} is [false]
+-      - [tmpdir]: the temporary directory currently in use *)
+-
+-  run_on_file : (string -> (string * string) -> string -> unit) option;
+-  (** The function which is called to perform the export using the
+-      temporary disk as reference.
+-
+-      The parameters are:
+-      - [filename]: the output filename for the format, or an empty
+-        string if {!output_to_file} is [false]
+-      - [tmpdisk]: a tuple representing the temporary disk, as
+-        [(filename, format)]
+-      - [tmpdir]: the temporary directory currently in use *)
+-}
+-
+-and extra_arg = {
+-  extra_argspec : Getopt.keys * Getopt.spec * Getopt.doc;
+-  (** The argspec.  See [Getopt] module in [common/mltools]. *)
+-}
+-
+-val defaults : format
+-(** This is so formats can write [let op = { defaults with ... }]. *)
+-
+-val register_format : format -> unit
+-(** Register a format. *)
+-
+-val bake : unit -> unit
+-(** 'Bake' is called after all modules have been registered.  We
+-    finalize the list of formats, sort it, and run some checks. *)
+-
+-val extra_args : unit -> Getopt.speclist
+-(** Get the list of extra arguments for the command line. *)
+-
+-val list_formats : unit -> string list
+-(** List supported formats. *)
+-
+-type set
+-(** A (sub-)set of formats. *)
+-
+-val empty_set : set
+-(** Empty set of formats. *)
+-
+-val add_to_set : string -> set -> set
+-(** [add_to_set name set] adds the format named [name] to [set].
+-
+-    Note that this will raise [Not_found] if [name] is not
+-    a valid format name. *)
+-
+-val set_mem : string -> set -> bool
+-(** Check whether the specified format is in the set. *)
+-
+-val set_cardinal : set -> int
+-(** Return the size of the formats set. *)
+-
+-val check_formats_prerequisites : formats:set -> unit
+-(** Check the prerequisites in all the formats listed in the [formats] set. *)
+-
+-val check_formats_appliance_prerequisites : formats:set -> Guestfs.guestfs -> unit
+-(** Check the appliance prerequisites in all the formats listed in the
+-    [formats] set. *)
+-
+-val run_formats_on_filesystem : formats:set -> Guestfs.guestfs -> string -> string -> unit
+-(** Run the filesystem-based export for all the formats listed in the
+-    [formats] set. *)
+-
+-val run_formats_on_file : formats:set -> string -> (string * string) -> string -> unit
+-(** Run the disk-based export for all the formats listed in the
+-    [formats] set. *)
+-
+-val get_filenames : formats:set -> string -> string list
+-(** Return the list of all the output filenames for formats in the
+-    [formats] set.  Only formats with {!output_to_file} as [true]
+-    will be taken into account. *)
+diff --git a/dib/output_format_docker.ml b/dib/output_format_docker.ml
+deleted file mode 100644
+index 7f254ba96..000000000
+--- a/dib/output_format_docker.ml
++++ /dev/null
+@@ -1,57 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2016-2023 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-open Tools_utils
+-open Common_gettext.Gettext
+-open Getopt.OptionName
+-
+-open Utils
+-open Output_format
+-
+-let docker_target = ref None
+-let set_docker_target arg = docker_target := Some arg
+-
+-let docker_check () =
+-  require_tool "docker";
+-  if !docker_target = None then
+-    error (f_"docker: a target was not specified, use ‘--docker-target’")
+-
+-let docker_run_fs (g : Guestfs.guestfs) _ temp_dir =
+-  let docker_target =
+-    match !docker_target with
+-    | None -> assert false (* checked earlier *)
+-    | Some t -> t in
+-  message (f_"Importing the image to docker as ‘%s’") docker_target;
+-  let dockertmp = Filename.temp_file ~temp_dir "docker." ".tar" in
+-  g#tar_out ~excludes:[| "./sys/*"; "./proc/*" |] ~xattrs:true ~selinux:true
+-    "/" dockertmp;
+-  let cmd = [ "sudo"; "docker"; "import"; dockertmp; docker_target ] in
+-  if run_command cmd <> 0 then exit 1
+-
+-let fmt = {
+-  defaults with
+-    name = "docker";
+-    output_to_file = false;
+-    extra_args = [
+-      { extra_argspec = [ L"docker-target" ], Getopt.String ("target", set_docker_target), s_"Repo and tag for docker"; };
+-    ];
+-    check_prerequisites = Some docker_check;
+-    run_on_filesystem = Some docker_run_fs;
+-}
+-
+-let () = register_format fmt
+diff --git a/dib/output_format_qcow2.ml b/dib/output_format_qcow2.ml
+deleted file mode 100644
+index d12605620..000000000
+--- a/dib/output_format_qcow2.ml
++++ /dev/null
+@@ -1,56 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2015-2023 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-open Std_utils
+-open Tools_utils
+-open Common_gettext.Gettext
+-open Getopt.OptionName
+-
+-open Utils
+-open Output_format
+-
+-let compressed = ref true
+-let qemu_img_options = ref None
+-let set_qemu_img_options arg = qemu_img_options := Some arg
+-
+-let qcow2_check () =
+-  require_tool "qemu-img"
+-
+-let qcow2_run_file filename (tmpdisk, tmpdiskfmt) _ =
+-  message (f_"Converting to qcow2");
+-  let cmd = [ "qemu-img"; "convert" ] @
+-    (if !compressed then [ "-c" ] else []) @
+-    [ "-f"; tmpdiskfmt; tmpdisk; "-O"; "qcow2" ] @
+-    (match !qemu_img_options with
+-    | None -> []
+-    | Some opt -> [ "-o"; opt ]) @
+-    [ qemu_input_filename filename ] in
+-  if run_command cmd <> 0 then exit 1
+-
+-let fmt = {
+-  defaults with
+-    name = "qcow2";
+-    extra_args = [
+-      { extra_argspec = [ S 'u' ], Getopt.Clear compressed, s_"Do not compress the qcow2 image"; };
+-      { extra_argspec = [ L"qemu-img-options" ], Getopt.String ("option", set_qemu_img_options), s_"Add qemu-img options"; };
+-    ];
+-    check_prerequisites = Some qcow2_check;
+-    run_on_file = Some qcow2_run_file;
+-}
+-
+-let () = register_format fmt
+diff --git a/dib/output_format_raw.ml b/dib/output_format_raw.ml
+deleted file mode 100644
+index a36679894..000000000
+--- a/dib/output_format_raw.ml
++++ /dev/null
+@@ -1,31 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2015-2023 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-open Output_format
+-
+-(* The raw format is currently handled on its own in virt-dib,
+- * so this is merely to add the output format to the available
+- * ones.  This might change in the future, though.
+- *)
+-
+-let fmt = {
+-  defaults with
+-    name = "raw";
+-}
+-
+-let () = register_format fmt
+diff --git a/dib/output_format_squashfs.ml b/dib/output_format_squashfs.ml
+deleted file mode 100644
+index d81589b09..000000000
+--- a/dib/output_format_squashfs.ml
++++ /dev/null
+@@ -1,39 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2017 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-open Tools_utils
+-open Common_gettext.Gettext
+-
+-open Output_format
+-
+-let squashfs_check (g : Guestfs.guestfs) =
+-  g#available [| "squashfs" |]
+-
+-let squashfs_run_fs (g : Guestfs.guestfs) filename _ =
+-  message (f_"Compressing the image as squashfs");
+-  g#mksquashfs ~excludes:[| "sys/*"; "proc/*"; "dev/*" |] ~compress:"xz"
+-    "/" filename
+-
+-let fmt = {
+-  defaults with
+-    name = "squashfs";
+-    check_appliance_prerequisites = Some squashfs_check;
+-    run_on_filesystem = Some squashfs_run_fs;
+-}
+-
+-let () = register_format fmt
+diff --git a/dib/output_format_tar.ml b/dib/output_format_tar.ml
+deleted file mode 100644
+index 6f749f870..000000000
+--- a/dib/output_format_tar.ml
++++ /dev/null
+@@ -1,35 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2015-2023 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-open Tools_utils
+-open Common_gettext.Gettext
+-
+-open Output_format
+-
+-let tar_run_fs (g : Guestfs.guestfs) filename _ =
+-  message (f_"Compressing the image as tar");
+-  g#tar_out ~excludes:[| "./sys/*"; "./proc/*" |] ~xattrs:true ~selinux:true
+-    "/" filename
+-
+-let fmt = {
+-  defaults with
+-    name = "tar";
+-    run_on_filesystem = Some tar_run_fs;
+-}
+-
+-let () = register_format fmt
+diff --git a/dib/output_format_tgz.ml b/dib/output_format_tgz.ml
+deleted file mode 100644
+index 447dfe6d9..000000000
+--- a/dib/output_format_tgz.ml
++++ /dev/null
+@@ -1,35 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2017 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-open Tools_utils
+-open Common_gettext.Gettext
+-
+-open Output_format
+-
+-let tgz_run_fs (g : Guestfs.guestfs) filename _ =
+-  message (f_"Compressing the image as tar.gz");
+-  g#tar_out ~excludes:[| "./sys/*"; "./proc/*" |] ~xattrs:true ~selinux:true
+-    ~compress:"gzip" "/" filename
+-
+-let fmt = {
+-  defaults with
+-    name = "tgz";
+-    run_on_filesystem = Some tgz_run_fs;
+-}
+-
+-let () = register_format fmt
+diff --git a/dib/output_format_vhd.ml b/dib/output_format_vhd.ml
+deleted file mode 100644
+index 1d56947a6..000000000
+--- a/dib/output_format_vhd.ml
++++ /dev/null
+@@ -1,47 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2015-2023 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-open Tools_utils
+-open Common_gettext.Gettext
+-
+-open Utils
+-open Output_format
+-
+-let vhd_check () =
+-  require_tool "vhd-util"
+-
+-let vhd_run_file filename (tmpdisk, _) temp_dir =
+-  message (f_"Converting to VHD");
+-  let fn_intermediate = Filename.temp_file ~temp_dir "vhd-intermediate." "" in
+-  let cmd = [ "vhd-util"; "convert"; "-s"; "0"; "-t"; "1";
+-              "-i"; tmpdisk; "-o"; fn_intermediate ] in
+-  if run_command cmd <> 0 then exit 1;
+-  let cmd = [ "vhd-util"; "convert"; "-s"; "1"; "-t"; "2";
+-              "-i"; fn_intermediate; "-o"; filename ] in
+-  if run_command cmd <> 0 then exit 1;
+-  if not (Sys.file_exists filename) then
+-    error (f_"VHD output not produced, most probably vhd-util is old or not patched for ‘convert’")
+-
+-let fmt = {
+-  defaults with
+-    name = "vhd";
+-    check_prerequisites = Some vhd_check;
+-    run_on_file = Some vhd_run_file;
+-}
+-
+-let () = register_format fmt
+diff --git a/dib/test-virt-dib-docs.sh b/dib/test-virt-dib-docs.sh
+deleted file mode 100755
+index 2ce7223f3..000000000
+--- a/dib/test-virt-dib-docs.sh
++++ /dev/null
+@@ -1,23 +0,0 @@
+-#!/bin/bash -
+-# libguestfs
+-# Copyright (C) 2016 Red Hat Inc.
+-#
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2 of the License, or
+-# (at your option) any later version.
+-#
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+-
+-set -e
+-
+-$TEST_FUNCTIONS
+-
+-$top_srcdir/podcheck.pl "$srcdir/virt-dib.pod" virt-dib
+diff --git a/dib/utils.ml b/dib/utils.ml
+deleted file mode 100644
+index 856705d09..000000000
+--- a/dib/utils.ml
++++ /dev/null
+@@ -1,111 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2015 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-open Std_utils
+-open Tools_utils
+-open Common_gettext.Gettext
+-
+-open Printf
+-
+-let unit_GB howmany =
+-  (Int64.of_int howmany) *^ 1024_L *^ 1024_L *^ 1024_L
+-
+-let current_arch () =
+-  (* Turn a CPU into the dpkg architecture naming. *)
+-  match Guestfs_config.host_cpu with
+-  | "amd64" | "x86_64" -> "amd64"
+-  | "i386" | "i486" | "i586" | "i686" -> "i386"
+-  | arch when String.is_prefix arch "armv" -> "armhf"
+-  | arch -> arch
+-
+-let output_filename image_name = function
+-  | "squashfs" -> image_name ^ ".squash"
+-  | fmt -> image_name ^ "." ^ fmt
+-
+-let log_filename () =
+-  let tm = Unix.gmtime (Unix.time ()) in
+-  sprintf "%s-%d%02d%02d-%02d%02d%02d.log"
+-    prog (tm.Unix.tm_year + 1900) (tm.Unix.tm_mon + 1) tm.Unix.tm_mday
+-    tm.Unix.tm_hour tm.Unix.tm_min tm.Unix.tm_sec
+-
+-let var_from_lines var lines =
+-  let var_with_equal = var ^ "=" in
+-  let var_lines = List.filter (fun x -> String.is_prefix x var_with_equal) lines in
+-  match var_lines with
+-  | [] ->
+-    error (f_"variable ‘%s’ not found in lines:\n%s")
+-      var (String.concat "\n" lines)
+-  | [x] -> snd (String.split "=" x)
+-  | _ ->
+-    error (f_"variable ‘%s’ has more than one occurrency in lines:\n%s")
+-      var (String.concat "\n" lines)
+-
+-let string_index_fn fn str =
+-  let len = String.length str in
+-  let rec loop i =
+-    if i = len then raise Not_found
+-    else if fn str.[i] then i
+-    else loop (i + 1) in
+-  loop 0
+-
+-let digit_prefix_compare a b =
+-  let myint str =
+-    try int_of_string str
+-    with _ -> 0 in
+-  let mylength str =
+-    match String.length str with
+-    | 0 -> max_int
+-    | x -> x in
+-  let split_prefix str =
+-    let len = String.length str in
+-    let digits =
+-      try string_index_fn (fun x -> not (Char.isdigit x)) str
+-      with Not_found -> len in
+-    match digits with
+-    | 0 -> "", str
+-    | x when x = len -> str, ""
+-    | _ -> String.sub str 0 digits, String.sub str digits (len - digits) in
+-
+-  let pref_a, rest_a = split_prefix a in
+-  let pref_b, rest_b = split_prefix b in
+-  match mylength pref_a, mylength pref_b, compare (myint pref_a) (myint pref_b) with
+-  | x, y, 0 when x = y -> compare rest_a rest_b
+-  | x, y, 0 -> x - y
+-  | _, _, x -> x
+-
+-let do_mkdir dir =
+-  mkdir_p dir 0o755
+-
+-let get_required_tool tool =
+-  try which tool
+-  with Executable_not_found tool ->
+-    error (f_"%s needed but not found") tool
+-
+-let require_tool tool =
+-  ignore (get_required_tool tool)
+-
+-let do_cp src destdir =
+-  let cmd = [ "cp"; "-t"; destdir; "-a"; src ] in
+-  if run_command cmd <> 0 then exit 1
+-
+-let ensure_trailing_newline str =
+-  if String.length str > 0 && str.[String.length str - 1] <> '\n' then str ^ "\n"
+-  else str
+-
+-let not_in_list l e =
+-  not (List.mem e l)
+diff --git a/dib/utils.mli b/dib/utils.mli
+deleted file mode 100644
+index dbbf82113..000000000
+--- a/dib/utils.mli
++++ /dev/null
+@@ -1,66 +0,0 @@
+-(* virt-dib
+- * Copyright (C) 2015 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-val unit_GB : int -> int64
+-(** [unit_GB n] returns n * 2^30 *)
+-
+-val current_arch : unit -> string
+-(** Turn the host_cpu into the dpkg architecture naming. *)
+-
+-val output_filename : string -> string -> string
+-(** [output_filename image_name format] generates a suitable output
+-    filename based on the image filename and output format. *)
+-
+-val log_filename : unit -> string
+-(** Generate a name for the log file containing the program name and
+-    current date/time. *)
+-
+-val var_from_lines : string -> string list -> string
+-(** Find variable definition in a set of lines of the form [var=value]. *)
+-
+-val string_index_fn : (char -> bool) -> string -> int
+-(** Apply function to each character in the string.  If the function
+-    returns true, return the index of the character.
+-
+-    In other words, like {!String.index} but using a function
+-    instead of a single character.
+-
+-    @raise Not_found if no match *)
+-
+-val digit_prefix_compare : string -> string -> int
+-
+-val do_mkdir : string -> unit
+-(** Wrapper around [mkdir -p -m 0755] *)
+-
+-val get_required_tool : string -> string
+-(** Ensure external program is installed.  Return the full path of the
+-    program or fail with an error message. *)
+-
+-val require_tool : string -> unit
+-(** Same as {!get_required_tool} but only checks the external program
+-    is installed and does not return the path. *)
+-
+-val do_cp : string -> string -> unit
+-(** Wrapper around [cp -a src destdir]. *)
+-
+-val ensure_trailing_newline : string -> string
+-(** If the input string is not [""], ensure there is a trailing ['\n'],
+-    adding one if necessary. *)
+-
+-val not_in_list : 'a list -> 'a -> bool
+-(** Opposite of {!List.mem}. *)
+diff --git a/dib/virt-dib.pod b/dib/virt-dib.pod
+deleted file mode 100644
+index c0119d278..000000000
+--- a/dib/virt-dib.pod
++++ /dev/null
+@@ -1,727 +0,0 @@
+-=head1 NAME
+-
+-virt-dib - Run diskimage-builder elements
+-
+-=head1 SYNOPSIS
+-
+- virt-dib -B DIB-LIB [options] elements...
+-
+-=head1 DESCRIPTION
+-
+-Virt-dib is a tool for using the elements of C<diskimage-builder>
+-to build a new disk image, generate new ramdisks, etc.
+-
+-Virt-dib is intended as safe replacement for C<diskimage-builder>
+-and its C<ramdisk-image-create> mode, see
+-L</COMPARISON WITH DISKIMAGE-BUILDER> for a quick comparison with
+-usage of C<diskimage-builder>.
+-
+-C<diskimage-builder> is part of the TripleO OpenStack project:
+-L<https://wiki.openstack.org/wiki/TripleO>.
+-
+-=head1 EXAMPLES
+-
+-=head2 Build simple images of distributions
+-
+- virt-dib \
+-   -B /path/to/diskimage-builder/lib \
+-   -p /path/to/diskimage-builder/elements \
+-   --envvar DIB_RELEASE=jessie \
+-   --name debian-jessie \
+-   debian vm
+-
+-This builds a Debian Jessie (8.x) disk image, suitable for running
+-as virtual machine, saved as F<debian-jessie.qcow2>.
+-
+-=head2 Build ramdisks
+-
+- virt-dib \
+-   -B /path/to/diskimage-builder/lib \
+-   -p /path/to/diskimage-builder/elements \
+-   --ramdisk \
+-   --name ramdisk \
+-   ubuntu deploy-ironic
+-
+-This builds a ramdisk for the Ironic OpenStack component based
+-on the Ubuntu distribution.
+-
+-=head1 OPTIONS
+-
+-=over 4
+-
+-=item B<--help>
+-
+-Display help.
+-
+-=item B<-B> PATH
+-
+-Set the path to the library directory of C<diskimage-builder>. This is
+-usually the F<lib> subdirectory in the sources and when installed,
+-and F</usr/share/diskimage-builder/lib> when installed in F</usr>.
+-
+-This parameter is B<mandatory>, as virt-dib needs to provide it for
+-the elements (as some of them might use scripts in it).
+-Virt-dib itself does not make use of the library directory.
+-
+-=item B<--arch> ARCHITECTURE
+-
+-Use the specified architecture for the output image.  The default
+-value is the same as the host running virt-dib.
+-
+-Right now this option does nothing more than setting the C<ARCH>
+-environment variable for the elements, and it’s up to them to
+-produce an image for the requested architecture.
+-
+-=item B<--checksum>
+-
+-Generate checksum files for the generated image.  The supported
+-checksums are MD5, and SHA256.
+-
+-=item B<--colors>
+-
+-=item B<--colours>
+-
+-Use ANSI colour sequences to colourize messages.  This is the default
+-when the output is a tty.  If the output of the program is redirected
+-to a file, ANSI colour sequences are disabled unless you use this
+-option.
+-
+-=item B<--debug> LEVEL
+-
+-Set the debug level to C<LEVEL>, which is a non-negative integer
+-number.  The default is C<0>.
+-
+-This debug level is different than what I<-x> and I<-v> set,
+-and it increases the debugging information printed out.
+-Specifically, this sets the C<DIB_DEBUG_TRACE>, and any value
+-E<gt> C<0> enables tracing in the scripts executed.
+-
+-=item B<--docker-target> TARGET
+-
+-Set the repository and tag for docker.
+-
+-This is used only when the formats include C<docker>, and it is
+-required in that case.
+-
+-=item B<--drive> DISK
+-
+-Add the specified disk to be used as helper drive where to cache
+-files of the elements, like disk images, distribution packages, etc.
+-
+-See L</HELPER DRIVE>.
+-
+-=item B<--drive-format> raw
+-
+-=item B<--drive-format> qcow2
+-
+-Specify the format of the helper drive.  If this flag is not given
+-then it is auto-detected from the drive itself.
+-
+-If working with untrusted raw-format guest disk images, you should
+-ensure the format is always specified.
+-
+-This option is used only if I<--drive> is specified.
+-
+-See L</HELPER DRIVE>.
+-
+-=item B<-p> PATH
+-
+-=item B<--element-path> PATH
+-
+-Add a new path with elements.  Paths are used in the same order as the
+-I<-p> parameters appear, so a path specified first is looked first,
+-and so on.
+-
+-Obviously, it is recommended to add the path to the own elements of
+-C<diskimage-builder>, as most of the other elements will rely on them.
+-
+-=item B<--extra-packages> PACKAGE,...
+-
+-Install additional packages in the image being built.
+-
+-This relies on the C<install-packages> binary provided by the
+-package management elements.
+-
+-This option can be specified multiple times, each time with multiple
+-packages separated by comma.
+-
+-=item B<--envvar> VARIABLE
+-
+-=item B<--envvar> VARIABLE=VALUE
+-
+-Carry or set an environment variable for the elements.
+-
+-See L</ENVIRONMENT VARIABLES> below for more information on the
+-interaction and usage of environment variables.
+-
+-This option can be used in two ways:
+-
+-=over 4
+-
+-=item B<--envvar> VARIABLE
+-
+-Carry the environment variable C<VARIABLE>. If it is not set, nothing
+-is exported to the elements.
+-
+-=item B<--envvar> VARIABLE=VALUE
+-
+-Set the environment variable C<VARIABLE> with value C<VALUE> for the
+-elements, regardless whether an environment variable with the same
+-name exists.
+-
+-This can be useful to pass environment variable without exporting
+-them in the environment where virt-dib runs.
+-
+-=back
+-
+-=item B<--exclude-element> ELEMENT
+-
+-Ignore the specified element.
+-
+-=item B<--exclude-script> SCRIPT
+-
+-Ignore any element script named C<SCRIPT>, whichever element it is in.
+-
+-This can be useful in case some script does not run well with
+-virt-dib, for example when they really need C<diskimage-builder>'s
+-environment.
+-
+-=item B<--formats> FORMAT,...
+-
+-Set the list of output formats, separating them with comma.
+-
+-Supported formats are:
+-
+-=over 4
+-
+-=item C<docker>
+-
+-Import the image to docker, running B<docker import>.  The target for
+-the image B<must> be specified using I<--docker-target>.
+-
+-Please note this operation usually requires the docker service to be
+-enabled, otherwise it will fail.  Furthermore, B<docker> is run using
+-L<sudo(8)>, so make sure the user has the permissions to run at least
+-B<docker>.
+-
+-=item C<qcow2> (enabled by default)
+-
+-QEMU’s qcow2.  This output format requires the C<qemu-img> tool.
+-
+-=item C<raw>
+-
+-Raw disk format.
+-
+-=item C<squashfs>
+-
+-An squashfs filesystem, compressed with XZ.  This output format
+-requires the C<squashfs> feature; see also
+-L<guestfs(3)/AVAILABILITY>.
+-
+-=item C<tar>
+-
+-An uncompressed tarball.
+-
+-=item C<tgz>
+-
+-A tarball compressed with gzip.
+-
+-=item C<vhd>
+-
+-C<Virtual Hard Disk> disk image.  This output format requires
+-the C<vhd-util> tool.
+-
+-Please note that the version of C<vhd-util> tool needs to be patched
+-to support the C<convert> subcommand, and to be bootable.
+-The patch is available here:
+-L<https://github.com/emonty/vhd-util/blob/master/debian/patches/citrix>.
+-
+-=back
+-
+-=item B<--fs-type> FILESYSTEM
+-
+-Set the filesystem type to use for the root filesystem.  The default
+-is C<ext4>.
+-
+-See also L<guestfs(3)/guestfs_filesystem_available>.
+-
+-=item B<--image-cache> DIRECTORY
+-
+-Set the path in the host where cache the resources used by the
+-elements of the C<extra-data.d> phase.  The default is
+-F<~/.cache/image-create>.
+-
+-Please note that most of the resources fetched in phases other than
+-C<extra-data.d> will be cached in the helper drive specified with
+-I<--drive>; see also L</HELPER DRIVE>.
+-
+-=item B<--install-type> TYPE
+-
+-Specify the default installation type.  Defaults to C<source>.
+-
+-Set to C<package> to use package based installations by default.
+-
+-=item B<--machine-readable>
+-
+-=item B<--machine-readable>=format
+-
+-This option is used to make the output more machine friendly
+-when being parsed by other programs.  See
+-L</MACHINE READABLE OUTPUT> below.
+-
+-=item B<-m> MB
+-
+-=item B<--memsize> MB
+-
+-Change the amount of memory allocated to the appliance. Increase
+-this if you find that the virt-dib execution runs out of memory.
+-
+-The default can be found with this command:
+-
+- guestfish get-memsize
+-
+-=item B<--mkfs-options> C<OPTION STRING>
+-
+-Add the specified options to L<mkfs(1)>, to be able to fine-tune
+-the root filesystem creation; the options are passed to the driver
+-of L<mfks(1)>, and not to L<mfks(1)> itself.  Note that
+-I<--fs-type> is used to change the filesystem type.
+-
+-You should use I<--mkfs-options> at most once.  To pass multiple
+-options, separate them with space, eg:
+-
+- virt-dib ... --mkfs-options '-O someopt -I foo'
+-
+-=item B<--network>
+-
+-=item B<--no-network>
+-
+-Enable or disable network access from the guest during the
+-installation.
+-
+-Enabled is the default.  Use I<--no-network> to disable access.
+-
+-The network only allows outgoing connections and has other minor
+-limitations.  See L<virt-rescue(1)/NETWORK>.
+-
+-This does not affect whether the guest can access the network once it
+-has been booted, because that is controlled by your hypervisor or
+-cloud environment and has nothing to do with virt-dib.
+-
+-If you use I<--no-network>, then the environment variable
+-C<DIB_OFFLINE> is set to C<1>, signaling the elements that they
+-should use only cached resources when available.  Note also that,
+-unlike with C<diskimage-builder> where elements may still be able
+-to access to the network even with C<DIB_OFFLINE=>, under virt-dib
+-network will not be accessible at all.
+-
+-=item B<--name> NAME
+-
+-Set the name of the output image file.  The default is C<image>.
+-
+-According to the chosen name, there will be the following in the
+-current directory:
+-
+-=over 4
+-
+-=item F<$NAME.ext>
+-
+-For each output format, a file named after the output image
+-with the extension depending on the format; for example:
+-F<$NAME.qcow2>, F<$NAME.raw>, etc.
+-
+-Not applicable in ramdisk mode, see L</RAMDISK BUILDING>.
+-
+-=item F<$NAME.d>
+-
+-A directory containing any files created by the elements, for example
+-F<dib-manifests> directory (created by the C<manifests> element),
+-ramdisks and kernels in ramdisk mode, and so on.
+-
+-=item F<$NAME.ext.checksum>
+-
+-When I<--checksum> is specified, there will be files for each
+-supported checksum type; for example: F<$NAME.ext.md5>,
+-F<$NAME.ext.sha256>, etc.
+-
+-Not applicable in ramdisk mode, see L</RAMDISK BUILDING>.
+-
+-=back
+-
+-=item B<--no-delete-on-failure>
+-
+-Don’t delete the output files on failure to build.  You can use this
+-to debug failures to run scripts.
+-
+-The default is to delete the output files if virt-dib fails (or,
+-for example, some script that it runs fails).
+-
+-=item B<--python> PYTHON
+-
+-Specify a different Python interpreter to use.  Parts of
+-C<diskimage-builder> are implemented in Python, and thus an
+-interpreter is needed.
+-
+-C<PYTHON> can either be an executable filename (e.g. F<python2>,
+-which is then searched in C<$PATH>), or a full path (e.g.
+-F</usr/bin/python2>).  If not specified, the default value is
+-F<python>.
+-
+-=item B<-q>
+-
+-=item B<--quiet>
+-
+-Don’t print ordinary progress messages.
+-
+-=item B<--qemu-img-options> option[,option,...]
+-
+-Pass I<--qemu-img-options> option(s) to the L<qemu-img(1)> command
+-to fine-tune the output format.  Options available depend on
+-the output format (see I<--formats>) and the installed version
+-of the qemu-img program.
+-
+-You should use I<--qemu-img-options> at most once.  To pass multiple
+-options, separate them with commas, eg:
+-
+- virt-dib ... --qemu-img-options cluster_size=512,preallocation=metadata ...
+-
+-=item B<--ramdisk>
+-
+-Set the ramdisk building mode.
+-
+-See L</RAMDISK BUILDING>.
+-
+-=item B<--ramdisk-element> NAME
+-
+-Set the name for the additional element added in ramdisk building
+-mode.  The default is C<ramdisk>.
+-
+-See L</RAMDISK BUILDING>.
+-
+-=item B<--root-label> LABEL
+-
+-Set the label for the root filesystem in the created image.
+-
+-Please note that some filesystems have different restrictions on
+-the length of their labels; for example, on C<ext2/3/4> filesystems
+-labels cannot be longer than 16 characters, while on C<xfs> they have
+-at most 12 characters.
+-
+-The default depends on the actual filesystem for the root partition
+-(see I<--fs-type>): on C<xfs> is C<img-rootfs>, while
+-C<cloudimg-rootfs> on any other filesystem.
+-
+-=item B<--size> SIZE
+-
+-Select the size of the output disk, where the size can be specified
+-using common names such as C<32G> (32 gigabytes) etc.
+-The default size is C<5G>.
+-
+-To specify size in bytes, the number must be followed by the lowercase
+-letter I<b>, eg: S<C<--size 10737418240b>>.
+-
+-See also L<virt-resize(1)> for resizing partitions of an existing
+-disk image.
+-
+-=item B<--skip-base>
+-
+-Skip the inclusion of the C<base> element.
+-
+-=item B<--smp> N
+-
+-Enable N E<ge> 2 virtual CPUs for scripts to use.
+-
+-=item B<-u>
+-
+-Do not compress resulting qcow2 images.  The default is to compress
+-them.
+-
+-=item B<-v>
+-
+-=item B<--verbose>
+-
+-Enable debugging messages.
+-
+-=item B<-V>
+-
+-=item B<--version>
+-
+-Display version number and exit.
+-
+-=item B<--wrap>
+-
+-Wrap error, warning, and informative messages.  This is the default
+-when the output is a tty.  If the output of the program is redirected
+-to a file, wrapping is disabled unless you use this option.
+-
+-=item B<-x>
+-
+-Enable tracing of libguestfs API calls.
+-
+-=back
+-
+-=head1 ENVIRONMENT VARIABLES
+-
+-Unlike with C<diskimage-builder>, the environment of the host is
+-B<not> inherited in the appliance when running most of the elements
+-(i.e. all except the ones in the C<extra-data.d> phase).
+-
+-To set environment for the elements being run, it is necessary to tell
+-virt-dib to use them, with the option I<--envvar>.  Such option
+-allows to selectively export environment variables when running the
+-elements, and it is the preferred way to pass environment variables
+-to the elements.
+-
+-To recap: if you want the environment variable C<MYVAR>
+-(and its content) to be available to the elements, you can do either
+-
+- export MYVAR   # whichever is its value
+- virt-dib ... --envvar MYVAR ...
+-
+-or
+-
+- virt-dib ... --envvar MYVAR=value_of_it ...
+-
+-=head1 HELPER DRIVE
+-
+-Virt-dib runs most of the element in its own appliance, and thus not
+-on the host.  Because of this, there is no possibility for elements
+-to cache resources directly on the host.
+-
+-To solve this issue, virt-dib allows the usage of an helper drive
+-where to store cached resources, like disk images,
+-distribution packages, etc. While this means that there is a smaller
+-space available for caching, at least it allows to limit the space
+-on the host for caches, without assuming that elements will do that
+-by themselves.
+-
+-Currently this disk is either required to have a single partition
+-on it, or the first partition on it will be used.  A disk with
+-the latter configuration can be easily created with L<guestfish(1)>
+-like the following:
+-
+- guestfish -N filename.img=fs:ext4:10G exit
+-
+-The above will create a disk image called F<filename.img>, 10G big,
+-with a single partition of type ext4;
+-see L<guestfish(1)/PREPARED DISK IMAGES>.
+-
+-It is recommended for it to be E<ge> 10G or even more, as elements
+-will cache disk images, distribution packages, etc.  As with any disk
+-image, the helper disk can be easily resized using L<virt-resize(1)>
+-if more space in it is needed.
+-
+-The drive can be accessed like any other disk image, for example using
+-other tools of libguestfs such as L<guestfish(1)>:
+-
+- guestfish -a filename.img -m /dev/sda1
+-
+-If no helper drive is specified with I<--drive>, all the resources
+-cached during a virt-dib run will be discarded.
+-
+-=head2 RESOURCES INSIDE THE DRIVE
+-
+-Inside the helper drive, it is possible to find the following
+-resources:
+-
+-=over 4
+-
+-=item F</home>
+-
+-This directory is set as C<HOME> environment variable during the
+-build.  It contains mostly the image cache (saved as
+-F</home/.cache/image-create>), and whichever other resource is
+-cached in the home directory of the user running the various tools.
+-
+-=item F</virt-dib-*.log>
+-
+-These are the logs of the elements being run within the libguestfs
+-appliance, which means all the phases except C<extra-data.d>.
+-
+-=back
+-
+-=head1 RAMDISK BUILDING
+-
+-Virt-dib can emulate also C<ramdisk-image-create>, which is a
+-secondary operation mode of C<diskimage-builder>.  Instead of being
+-a different tool name, virt-dib provides easy access to this mode
+-using the I<--ramdisk> switch.
+-
+-In this mode:
+-
+-=over 4
+-
+-=item
+-
+-there is an additional ramdisk element added (see
+-I<--ramdisk-element>)
+-
+-=item
+-
+-no image is produced (so I<--formats> is ignored)
+-
+-=item
+-
+-F<$NAME.d> (see I<--name>) will contain initrd, kernel, etc
+-
+-=back
+-
+-=head1 TEMPORARY DIRECTORY
+-
+-Virt-dib uses the standard temporary directory used by libguestfs,
+-see L<guestfs(3)/ENVIRONMENT VARIABLES>.
+-
+-By default this location is F</tmp> (default value for C<TMPDIR>),
+-which on some systems may be on a tmpfs filesystem, and thus
+-defaulting to a maximum size of I<half> of physical RAM.
+-If virt-dib exceeds this, it may hang or exit early with an error.
+-The solution is to point C<TMPDIR> to a permanent location used
+-as temporary location, for example:
+-
+- mkdir local-tmp
+- env TMPDIR=$PWD/local-tmp virt-dib ...
+- rm -rf local-tmp
+-
+-=head1 EXTRA DEPENDENCIES
+-
+-Because of virt-dib runs most of the elements in its own appliance,
+-all the tools and libraries used by elements running outside the
+-guest (typically C<root.d>, C<block-device.d>, and C<cleanup.d>)
+-need to be present in the appliance as well.  In case they
+-are not, scripts will fail typically with a C<command not found>
+-error.
+-
+-For tools and libraries packaged by the distribution, the easy
+-solution is to tell libguestfs to include additional packages in the
+-appliance.  This is doable by e.g. creating a new file with the
+-additional packages:
+-
+- # echo wget > /usr/lib64/guestfs/supermin.d/dib-my-extra
+-
+-The actual path to the F<supermin.d> directory depends on the
+-distribution; additional files can list more packages, each in
+-its own line.  For more details, see L<supermin(1)>.
+-
+-=head1 COMPARISON WITH DISKIMAGE-BUILDER
+-
+-Virt-dib is intended as safe replacement for C<diskimage-builder>
+-and its C<ramdisk-image-create> mode; the user-notable differences
+-consist in:
+-
+-=over 4
+-
+-=item
+-
+-the command line arguments; some of the arguments are the same as
+-available in C<diskimage-builder>, while some have different names:
+-
+- disk-image-create             virt-dib
+- -----------------             --------
+- -a ARCH                       --arch ARCH
+- --image-size SIZE             --size SIZE
+- --max-online-resize SIZE      doable using --mkfs-options
+- -n                            --skip-base
+- -o IMAGENAME                  --name IMAGENAME
+- -p PACKAGE(S)                 --extra-packages PACKAGE(S)
+- -t FORMAT(S)                  --formats FORMAT(S)
+- -x                            --debug 1
+- -x -x                         --debug 2
+- -x -x [-x ...]                --debug 3/4/etc
+-
+-=item
+-
+-the location of non-image output files (like ramdisks and kernels)
+-
+-=item
+-
+-the way some of the cached resources are saved: using an helper drive,
+-not directly on the disk where virt-dib is run
+-
+-=item
+-
+-the need to specify a target size for the output disk, as opposed
+-to C<diskimage-builder> calculating an optimal one
+-
+-=item
+-
+-the handling of environment variables, see L</ENVIRONMENT VARIABLES>.
+-
+-Furthermore, other than the libguestfs own environment variables
+-(see L<guestfs(3)/ENVIRONMENT VARIABLES>), virt-dib does not read
+-any other environment variable: this means that all the options
+-and behaviour changes are specified solely using command line
+-arguments
+-
+-=item
+-
+-extra tools needed on some out-of-chroot phases need to be available
+-in the appliance, see L</EXTRA DEPENDENCIES>.
+-
+-=back
+-
+-Elements themselves should notice no difference in they way
+-they are run; behaviour differences may due to wrong assumptions in
+-elements, or not correct virt-dib emulation.
+-
+-Known issues at the moment:
+-
+-=over 4
+-
+-=item
+-
+-(none)
+-
+-=back
+-
+-=head1 MACHINE READABLE OUTPUT
+-
+-The I<--machine-readable> option can be used to make the output more
+-machine friendly, which is useful when calling virt-dib from other
+-programs, GUIs etc.
+-
+-Use the option on its own to query the capabilities of the
+-virt-dib binary.  Typical output looks like this:
+-
+- $ virt-dib --machine-readable
+- virt-dib
+- output:qcow2
+- output:tar
+- output:raw
+- output:vhd
+-
+-A list of features is printed, one per line, and the program exits
+-with status 0.
+-
+-The C<output:> features refer to the output formats (I<--formats>
+-command line option) supported by this binary.
+-
+-It is possible to specify a format string for controlling the output;
+-see L<guestfs(3)/ADVANCED MACHINE READABLE OUTPUT>.
+-
+-=head1 TESTING
+-
+-Virt-dib has been tested with C<diskimage-builder> (and its elements)
+-E<ge> 0.1.43; from time to time also with C<tripleo-image-elements>
+-and C<sahara-image-elements>.
+-
+-Previous versions may work, but it is not guaranteed.
+-
+-=head1 EXIT STATUS
+-
+-This program returns 0 if successful, or non-zero if there was an
+-error.
+-
+-=head1 SEE ALSO
+-
+-L<guestfs(3)>,
+-L<guestfish(1)>,
+-L<virt-resize(1)>,
+-L<http://libguestfs.org/>.
+-
+-=head1 AUTHOR
+-
+-Pino Toscano (C<ptoscano at redhat dot com>)
+-
+-=head1 COPYRIGHT
+-
+-Copyright (C) 2015 Red Hat Inc.
+diff --git a/run.in b/run.in
+index f5c643822..15f487b4c 100755
+--- a/run.in
++++ b/run.in
+@@ -74,7 +74,6 @@ prepend PATH "$b/builder"
+ prepend PATH "$b/cat"
+ prepend PATH "$b/customize"
+ prepend PATH "$b/df"
+-prepend PATH "$b/dib"
+ prepend PATH "$b/diff"
+ prepend PATH "$b/drivers"
+ prepend PATH "$b/edit"

@@ -1,0 +1,88 @@
+From 9ac1ea9d5269c72874ea662cd70803b3781d0876 Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Fri, 19 May 2023 17:55:06 +0200
+Subject: [PATCH] inspector: rename VGs and LVs in LUKS-on-LVM test
+
+In preparation for a subsequent patch, rename "VG" to "Volume-Group", and
+"LV<n>" to "Logical-Volume-<n>", in the LUKS-on-LVM virt-inspector test.
+
+Bugzilla: https://bugzilla.redhat.com/show_bug.cgi?id=2168506
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+Message-Id: <20230519155507.369494-3-lersek@redhat.com>
+Reviewed-by: Richard W.M. Jones <rjones@redhat.com>
+(cherry picked from commit 46a381efcf2bf74f1534ecb198f9570ee5baaccd)
+---
+ inspector/test-virt-inspector-luks-on-lvm.sh | 11 +++----
+ test-data/phony-guests/make-fedora-img.pl    | 30 +++++++++++---------
+ 2 files changed, 23 insertions(+), 18 deletions(-)
+
+diff --git a/inspector/test-virt-inspector-luks-on-lvm.sh b/inspector/test-virt-inspector-luks-on-lvm.sh
+index b9989433d..35454e630 100755
+--- a/inspector/test-virt-inspector-luks-on-lvm.sh
++++ b/inspector/test-virt-inspector-luks-on-lvm.sh
+@@ -36,14 +36,15 @@ if [ "$(guestfish version | grep minor | awk '{print $2}')" -lt 47 ]; then
+ fi
+ 
+ f=../test-data/phony-guests/fedora-luks-on-lvm.img
+-keys=(--key /dev/VG/Root:key:FEDORA-Root
+-      --key /dev/VG/LV1:key:FEDORA-LV1
+-      --key /dev/VG/LV2:key:FEDORA-LV2
+-      --key /dev/VG/LV3:key:FEDORA-LV3)
++keys=(--key /dev/Volume-Group/Root:key:FEDORA-Root
++      --key /dev/Volume-Group/Logical-Volume-1:key:FEDORA-LV1
++      --key /dev/Volume-Group/Logical-Volume-2:key:FEDORA-LV2
++      --key /dev/Volume-Group/Logical-Volume-3:key:FEDORA-LV3)
+ 
+ # Ignore zero-sized file.
+ if [ -s "$f" ]; then
+-    uuid_root=$(guestfish --ro -i -a "$f" "${keys[@]}" luks-uuid /dev/VG/Root)
++    uuid_root=$(guestfish --ro -i -a "$f" "${keys[@]}" \
++                    luks-uuid /dev/Volume-Group/Root)
+     b=$(basename "$f")
+     $VG virt-inspector "${keys[@]}" --format=raw -a "$f" > "actual-$b.xml"
+     # Check the generated output validate the schema.
+diff --git a/test-data/phony-guests/make-fedora-img.pl b/test-data/phony-guests/make-fedora-img.pl
+index ffa7e0f10..9721ce4a9 100755
+--- a/test-data/phony-guests/make-fedora-img.pl
++++ b/test-data/phony-guests/make-fedora-img.pl
+@@ -224,23 +224,27 @@ EOF
+ 
+     # Create the Volume Group on /dev/sda2.
+     $g->pvcreate ('/dev/sda2');
+-    $g->vgcreate ('VG', ['/dev/sda2']);
+-    $g->lvcreate ('Root', 'VG', 256);
+-    $g->lvcreate ('LV1',  'VG', 32);
+-    $g->lvcreate ('LV2',  'VG', 32);
+-    $g->lvcreate ('LV3',  'VG', 64);
++    $g->vgcreate ('Volume-Group', ['/dev/sda2']);
++    $g->lvcreate ('Root',              'Volume-Group', 256);
++    $g->lvcreate ('Logical-Volume-1',  'Volume-Group', 32);
++    $g->lvcreate ('Logical-Volume-2',  'Volume-Group', 32);
++    $g->lvcreate ('Logical-Volume-3',  'Volume-Group', 64);
+ 
+     # Format each Logical Group as a LUKS device, with a different password.
+-    $g->luks_format ('/dev/VG/Root', 'FEDORA-Root', 0);
+-    $g->luks_format ('/dev/VG/LV1',  'FEDORA-LV1',  0);
+-    $g->luks_format ('/dev/VG/LV2',  'FEDORA-LV2',  0);
+-    $g->luks_format ('/dev/VG/LV3',  'FEDORA-LV3',  0);
++    $g->luks_format ('/dev/Volume-Group/Root',              'FEDORA-Root', 0);
++    $g->luks_format ('/dev/Volume-Group/Logical-Volume-1',  'FEDORA-LV1',  0);
++    $g->luks_format ('/dev/Volume-Group/Logical-Volume-2',  'FEDORA-LV2',  0);
++    $g->luks_format ('/dev/Volume-Group/Logical-Volume-3',  'FEDORA-LV3',  0);
+ 
+     # Open the LUKS devices. This creates nodes like /dev/mapper/*-luks.
+-    $g->cryptsetup_open ('/dev/VG/Root', 'FEDORA-Root', 'Root-luks');
+-    $g->cryptsetup_open ('/dev/VG/LV1',  'FEDORA-LV1',  'LV1-luks');
+-    $g->cryptsetup_open ('/dev/VG/LV2',  'FEDORA-LV2',  'LV2-luks');
+-    $g->cryptsetup_open ('/dev/VG/LV3',  'FEDORA-LV3',  'LV3-luks');
++    $g->cryptsetup_open ('/dev/Volume-Group/Root',
++                         'FEDORA-Root', 'Root-luks');
++    $g->cryptsetup_open ('/dev/Volume-Group/Logical-Volume-1',
++                         'FEDORA-LV1',  'LV1-luks');
++    $g->cryptsetup_open ('/dev/Volume-Group/Logical-Volume-2',
++                         'FEDORA-LV2',  'LV2-luks');
++    $g->cryptsetup_open ('/dev/Volume-Group/Logical-Volume-3',
++                         'FEDORA-LV3',  'LV3-luks');
+ 
+     # Phony root filesystem.
+     $g->mkfs ('ext2', '/dev/mapper/Root-luks', blocksize => 4096, label => 'ROOT');
