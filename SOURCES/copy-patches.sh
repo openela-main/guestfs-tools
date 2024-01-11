@@ -7,7 +7,7 @@ set -e
 #   ./copy-patches.sh
 
 project=guestfs-tools
-rhel_version=9.2
+rhel_version=9.3
 
 # Check we're in the right directory.
 if [ ! -f $project.spec ]; then
@@ -17,7 +17,7 @@ fi
 
 case `id -un` in
     rjones) git_checkout=$HOME/d/$project-rhel-$rhel_version ;;
-    lersek) git_checkout=$HOME/src/guestfs-tools/$project ;;
+    lacos)  git_checkout=$HOME/src/v2v/$project ;;
     *)      git_checkout=$HOME/d/$project-rhel-$rhel_version ;;
 esac
 if [ ! -d $git_checkout ]; then
@@ -36,7 +36,12 @@ git rm -f [0-9]*.patch ||:
 rm -f [0-9]*.patch
 
 # Get the patches.
-(cd $git_checkout; rm -f [0-9]*.patch; git format-patch -N --submodule=diff $tag)
+(
+  cd $git_checkout
+  rm -f [0-9]*.patch
+  git -c core.abbrev=9 format-patch -O/dev/null --subject-prefix=PATCH -N \
+      --submodule=diff --no-signature --patience $tag
+)
 mv $git_checkout/[0-9]*.patch .
 
 # Remove any not to be applied.

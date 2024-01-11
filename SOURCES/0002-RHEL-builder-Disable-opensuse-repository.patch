@@ -1,4 +1,4 @@
-From 888ecde429ef6fab9567359abae1e2d04d552666 Mon Sep 17 00:00:00 2001
+From 01ebf5d7d5656b45168de9081906522a32008080 Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Mon, 21 Nov 2022 13:03:22 +0000
 Subject: [PATCH] RHEL: builder: Disable opensuse repository
@@ -24,6 +24,3 @@ index 19f979699..a57fc6977 100644
 +#[opensuse.org]
 +#uri=http://download.opensuse.org/repositories/Virtualization:/virt-builder-images/images/index
 +#gpgkey=file://@SYSCONFDIR@/virt-builder/repos.d/opensuse.gpg
--- 
-2.31.1
-

@@ -2,14 +2,7 @@
 #
 # As the test suite takes a very long time to run and is somewhat
 # unreliable on !x86 architectures, only run it on x86-64.
-%if !0%{?rhel}
 %global test_arches x86_64
-%else
-# RHEL 9 only:
-# x86-64:  "/lib64/libc.so.6: CPU ISA level is lower than required"
-#          (RHBZ#1919389)
-%global test_arches NONE
-%endif
 
 # Verify tarball signature with GPGv2.
 %global verify_tarball_signature 1
@@ -18,15 +11,15 @@
 %global patches_touch_autotools 1
 
 # The source directory.
-%global source_directory 1.48-stable
+%global source_directory 1.50-stable
 
 # Filter perl provides.
 %{?perl_default_filter}
 
 Summary:       Tools to access and modify virtual machine disk images
 Name:          guestfs-tools
-Version:       1.48.2
-Release:       8%{?dist}
+Version:       1.50.1
+Release:       3%{?dist}
 License:       GPLv2+
 
 # Build only for architectures that have a kernel
@@ -52,24 +45,16 @@ Source2:       libguestfs.keyring
 Source3:       copy-patches.sh
 
 # Patches are maintained in the following repository:
-# https://github.com/rwmjones/guestfs-tools/commits/rhel-9.2
+# https://github.com/rwmjones/guestfs-tools/commits/rhel-9.3
 
 # Patches.
-Patch0001:     0001-sysprep-remove-lvm2-s-default-system.devices-file.patch
-Patch0002:     0002-adopt-inversion-of-SELinux-relabeling-in-virt-custom.patch
-Patch0003:     0003-update-common-submodule.patch
-Patch0004:     0004-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
-Patch0005:     0005-customize-rebase-to-the-common-mlcustomize-Guest_pac.patch
-Patch0006:     0006-update-common-submodule-for-CVE-2022-2211-fix.patch
-Patch0007:     0007-cat-log-ls-tail-diff-edit-insp.-set-networking-for-k.patch
-Patch0008:     0008-get-kernel-sparsify-set-networking-for-key-ID-clevis.patch
-Patch0009:     0009-customize-add-reminder-about-key-ID-clevis.patch
-Patch0010:     0010-sysprep-set-networking-for-key-ID-clevis.patch
-Patch0011:     0011-sysprep-make-an-effort-to-cope-with-LUKS-on-LVM.patch
-Patch0012:     0012-sysprep-advise-against-cloning-VMs-with-internal-ful.patch
-Patch0013:     0013-builder-dib-Replace-On_exit.rmdir-with-On_exit.rm_rf.patch
-Patch0014:     0014-customize-Support-Rocky-Linux.patch
-Patch0015:     0015-RHEL-builder-Disable-opensuse-repository.patch
+Patch0001:     0001-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
+Patch0002:     0002-RHEL-builder-Disable-opensuse-repository.patch
+Patch0003:     0003-Remove-virt-dib.patch
+Patch0004:     0004-drivers-Look-up-vendor-and-device-names-in-PCI-and-U.patch
+Patch0005:     0005-update-common-submodule.patch
+Patch0006:     0006-inspector-rename-VGs-and-LVs-in-LUKS-on-LVM-test.patch
+Patch0007:     0007-inspector-test-dev-mapper-VG-LV-translation-in-LUKS-.patch
 
 %if 0%{patches_touch_autotools}
 BuildRequires: autoconf, automake, libtool, gettext-devel
@@ -78,7 +63,7 @@ BuildRequires: autoconf, automake, libtool, gettext-devel
 # Basic build requirements.
 BuildRequires: gcc, gcc-c++
 BuildRequires: make
-BuildRequires: libguestfs-devel >= 1:1.48.3-4
+BuildRequires: libguestfs-devel >= 1:1.49.8-1
 BuildRequires: libguestfs-xfs
 BuildRequires: perl(Pod::Simple)
 BuildRequires: perl(Pod::Man)
@@ -90,8 +75,12 @@ BuildRequires: pcre2-devel
 BuildRequires: libxml2-devel
 BuildRequires: jansson-devel
 BuildRequires: libvirt-devel
+BuildRequires: libosinfo-devel
 BuildRequires: libxcrypt-devel
 BuildRequires: ncurses-devel
+%ifarch x86_64
+BuildRequires: glibc-static
+%endif
 BuildRequires: ocaml-libguestfs-devel
 BuildRequires: ocaml-findlib-devel
 BuildRequires: ocaml-gettext-devel
@@ -111,6 +100,7 @@ BuildRequires: perl(Expect)
 BuildRequires: bash-completion
 BuildRequires: /usr/bin/qemu-img
 BuildRequires: xorriso
+BuildRequires: hwdata-devel
 BuildRequires: perl(Locale::TextDomain)
 BuildRequires: perl(Sys::Guestfs)
 BuildRequires: perl(Win::Hivex)
@@ -121,8 +111,10 @@ BuildRequires: perl-generators
 BuildRequires: gnupg2
 %endif
 
-# Version containing guestfs_clevis_luks_unlock
-Requires:      libguestfs%{?_isa} >= 1:1.48.3-4
+# Ensure a minimum version of libguestfs is installed.  This contains
+# a workaround for openssl bug RHBZ#2133884 and the hang where we
+# called setenv between fork and exec.
+Requires:      libguestfs >= 1.49.6-1
 
 # For virt-builder:
 Requires:      curl
@@ -132,6 +124,9 @@ Requires:      xz
 
 # For virt-builder-repository:
 Suggests:      osinfo-db
+
+# For virt-drivers:
+Recommends:    hwdata
 
 # For virt-inspector, since Fedora and RHEL >= 7 use XFS:
 Recommends:    libguestfs-xfs
@@ -171,6 +166,8 @@ like the df(1) command, but for virtual machines, except that it also
 works for Windows virtual machines.
 
 Virt-diff shows the differences between virtual machines.
+
+Virt-drivers detects the bootloader, kernel and drivers inside a guest.
 
 Virt-edit is a command line tool to edit the contents of a file in a
 virtual machine.
@@ -221,24 +218,6 @@ Obsoletes:     libguestfs-tools <= 1:1.45.2-1
 %description -n virt-win-reg
 Virt-win-reg lets you look at and modify the Windows Registry of
 Windows virtual machines.
-
-
-%if !0%{?rhel}
-%package -n virt-dib
-Summary:       Safe and secure diskimage-builder replacement
-License:       GPLv2+
-# This subpackage (only) must have an Epoch of 1 because it
-# replaces a package in libguestfs which had an Epoch of 1.
-Epoch:         1
-
-Requires:      libguestfs-dib >= 1:1.45.2-1
-
-
-%description -n virt-dib
-Virt-dib is a safe and secure alternative to the OpenStack
-diskimage-builder command.  It is compatible with most
-diskimage-builder elements.
-%endif
 
 
 %package bash-completion
@@ -298,6 +277,13 @@ make V=1 %{?_smp_mflags}
 
 %check
 %ifarch %{test_arches}
+# Only run the tests with non-debug (ie. non-Rawhide) kernels.
+# XXX This tests for any debug kernel installed.
+if grep CONFIG_DEBUG_MUTEXES=y /lib/modules/*/config ; then
+    echo "Skipping tests because debug kernel is installed"
+    exit 0
+fi
+
 # Enable debugging.
 export LIBGUESTFS_DEBUG=1
 export LIBGUESTFS_TRACE=1
@@ -337,12 +323,6 @@ find $RPM_BUILD_ROOT -name '*.la' -delete
 mv $RPM_BUILD_ROOT%{_docdir}/%{name} installed-docs
 gzip --best installed-docs/*.xml
 
-%if 0%{?rhel}
-# Remove virt-dib if it was built.
-rm -f $RPM_BUILD_ROOT%{_bindir}/virt-dib
-rm -f $RPM_BUILD_ROOT%{_mandir}/man1/virt-dib.1*
-%endif
-
 # Find locale files.
 %find_lang %{name}
 
@@ -373,6 +353,7 @@ end
 %{_bindir}/virt-customize
 %{_bindir}/virt-df
 %{_bindir}/virt-diff
+%{_bindir}/virt-drivers
 %{_bindir}/virt-edit
 %{_bindir}/virt-filesystems
 %{_bindir}/virt-format
@@ -394,6 +375,7 @@ end
 %{_mandir}/man1/virt-customize.1*
 %{_mandir}/man1/virt-df.1*
 %{_mandir}/man1/virt-diff.1*
+%{_mandir}/man1/virt-drivers.1*
 %{_mandir}/man1/virt-edit.1*
 %{_mandir}/man1/virt-filesystems.1*
 %{_mandir}/man1/virt-format.1*
@@ -416,15 +398,6 @@ end
 %{_mandir}/man1/virt-win-reg.1*
 
 
-%if !0%{?rhel}
-%files -n virt-dib
-%license COPYING
-%doc README
-%{_bindir}/virt-dib
-%{_mandir}/man1/virt-dib.1*
-%endif
-
-
 %files bash-completion
 %license COPYING
 %dir %{_datadir}/bash-completion/completions
@@ -440,6 +413,17 @@ end
 
 
 %changelog
+* Thu Jun 08 2023 Laszlo Ersek <lersek@redhat.com> - 1.50.1-3
+- let virt-inspector recognize "--key /dev/mapper/VG-LV:key:password"
+- reenable "make check"; we now use "-cpu max" (libguestfs 30f74f38bd6e)
+  resolves: rhbz#2209280
+
+* Thu Apr 06 2023 Richard W.M. Jones <rjones@redhat.com> - 1.50.1-1
+- Rebase to guestfs-tools 1.50.1
+  resolves: rhbz#2168626
+- Fix virt-drivers inspection of RHEL 9.2 guests
+  resolves: rhbz#2184963
+
 * Thu Nov 24 2022 Richard W.M. Jones <rjones@redhat.com> - 1.48.2-8
 - Support Rocky Linux in virt-customize
   resolves: rhbz#2133443
