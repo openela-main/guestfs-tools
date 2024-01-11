@@ -1,0 +1,39 @@
+From 0b92347337e9201140ed2daf77a934c731de6630 Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Thu, 14 Jul 2022 12:40:05 +0200
+Subject: [PATCH] sysprep: advise against cloning VMs with internal full disk
+ encryption
+
+This is relevant for sysprep because we recommend sysprep for facilitating
+cloning.
+
+Bugzilla: https://bugzilla.redhat.com/show_bug.cgi?id=2106286
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+Message-Id: <20220714104005.8334-3-lersek@redhat.com>
+Reviewed-by: Richard W.M. Jones <rjones@redhat.com>
+(cherry picked from commit b49ee909f5d1a0d7b5c668335b9098ca8ff85bfd)
+---
+ sysprep/virt-sysprep.pod | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/sysprep/virt-sysprep.pod b/sysprep/virt-sysprep.pod
+index deeb5341e..232b9f24b 100644
+--- a/sysprep/virt-sysprep.pod
++++ b/sysprep/virt-sysprep.pod
+@@ -519,6 +519,13 @@ Either or both options can be used multiple times on the command line.
+ 
+ =head1 SECURITY
+ 
++Virtual machines that employ full disk encryption I<internally to the
++guest> should not be considered for cloning and distribution, as it
++provides multiple parties with the same internal volume key, enabling
++any one such party to decrypt all the other clones.  Refer to the L<LUKS
++FAQ|https://gitlab.com/cryptsetup/cryptsetup/-/blob/main/FAQ.md> for
++details.
++
+ Although virt-sysprep removes some sensitive information from the
+ guest, it does not pretend to remove all of it.  You should examine
+ the L</OPERATIONS> above and the guest afterwards.
+-- 
+2.31.1
+

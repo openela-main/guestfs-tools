@@ -1,0 +1,27 @@
+From bbdc10642eff480246271f98180733f732c306b3 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 7 Jul 2015 09:28:03 -0400
+Subject: [PATCH] RHEL: Reject use of libguestfs-winsupport features except for
+ virt-* tools (RHBZ#1240276).
+
+Fix the tests: it doesn't let us use guestfish for arbitrary Windows
+edits.
+---
+ test-data/phony-guests/make-windows-img.sh | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/test-data/phony-guests/make-windows-img.sh b/test-data/phony-guests/make-windows-img.sh
+index 30908a918..73cf5144e 100755
+--- a/test-data/phony-guests/make-windows-img.sh
++++ b/test-data/phony-guests/make-windows-img.sh
+@@ -37,6 +37,7 @@ fi
+ 
+ # Create a disk image.
+ guestfish <<EOF
++set-program virt-testing
+ sparse windows.img-t 512M
+ run
+ 
+-- 
+2.31.1
+
