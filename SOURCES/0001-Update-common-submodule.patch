@@ -1,0 +1,26 @@
+From 28ecb8693bbded3e1c70c1baa57f3498a6b8127e Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Sat, 9 Dec 2023 12:59:13 +0000
+Subject: [PATCH] Update common submodule
+
+Pick up this bug fix:
+
+    mltools/libosinfo-c.c: Fix off-by-one error
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common cd29aee91..0dba002c2:
+diff --git a/common/mltools/libosinfo-c.c b/common/mltools/libosinfo-c.c
+index 93357fd91..a48c8989f 100644
+--- a/common/mltools/libosinfo-c.c
++++ b/common/mltools/libosinfo-c.c
+@@ -296,7 +296,7 @@ v2v_osinfo_os_get_device_drivers (value osv)
+ 
+     driver = OSINFO_DEVICE_DRIVER(osinfo_list_get_nth (OSINFO_LIST(list), i));
+ 
+-    vi = caml_alloc (6, 0);
++    vi = caml_alloc (7, 0);
+     str = osinfo_device_driver_get_architecture (driver);
+     copyv = caml_copy_string (str);
+     Store_field (vi, 0, copyv);

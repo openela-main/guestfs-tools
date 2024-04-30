@@ -1,0 +1,63 @@
+From 5f9beb89443f84640efc52ee6cd68f7f880fb66b Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Fri, 19 Jan 2024 13:22:51 +0000
+Subject: [PATCH] builder: Add a test of the --chown parameter
+
+Also update the libguestfs common submodule, pulling in this change
+from libguestfs:
+
+    generator/customize.ml: Split --chown parameter on ':' character
+
+and this patch to common/mltools:
+
+    mltools/libosinfo-c.c: Fix off-by-one error
+
+(cherry picked from commit 299dc5ec2a0bdd9adecef75adc6a5eca0dc685b1)
+---
+ builder/test-virt-builder.sh | 4 ++++
+ common                       | 2 +-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/builder/test-virt-builder.sh b/builder/test-virt-builder.sh
+index 705788a3c..f839fd7af 100755
+--- a/builder/test-virt-builder.sh
++++ b/builder/test-virt-builder.sh
+@@ -69,6 +69,7 @@ virt-builder phony-fedora \
+     --write '/etc/append6:
+ ' \
+     --append-line '/etc/append6:line2' \
++    --chown 1:1:/etc/append6 \
+     --firstboot Makefile --firstboot-command 'echo "hello"' \
+     --firstboot-install "minicom,inkscape"
+ 
+@@ -112,6 +113,7 @@ echo append5:
+ cat /etc/append5
+ echo append6:
+ cat /etc/append6
++stat /etc/append6 | grep '^[ug]id:'
+ 
+ echo -----
+ EOF
+@@ -154,6 +156,8 @@ append6:
+ 
+ line2
+ 
++uid: 1
++gid: 1
+ -----" ]; then
+     echo "$0: unexpected output:"
+     cat test-virt-builder.out
+Submodule common 0dba002c2..54869c987:
+diff --git a/common/mlcustomize/customize_cmdline.ml b/common/mlcustomize/customize_cmdline.ml
+index 245d9960a..48ee33445 100644
+--- a/common/mlcustomize/customize_cmdline.ml
++++ b/common/mlcustomize/customize_cmdline.ml
+@@ -157,7 +157,7 @@ let rec argspec () =
+     let len = String.length arg in
+     String.sub arg 0 i, String.sub arg (i+1) (len-(i+1))
+   and split_string_triplet option_name arg =
+-    match String.nsplit ~max:3 "," arg with
++    match String.nsplit ~max:3 ":" arg with
+     | [a; b; c] -> a, b, c
+     | _ ->
+         error (f_"invalid format for '--%s' parameter, see the man page")

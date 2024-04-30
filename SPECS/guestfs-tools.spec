@@ -11,16 +11,16 @@
 %global patches_touch_autotools 1
 
 # The source directory.
-%global source_directory 1.50-stable
+%global source_directory 1.51-development
 
 # Filter perl provides.
 %{?perl_default_filter}
 
 Summary:       Tools to access and modify virtual machine disk images
 Name:          guestfs-tools
-Version:       1.50.1
-Release:       3%{?dist}
-License:       GPLv2+
+Version:       1.51.6
+Release:       2%{?dist}
+License:       GPL-2.0-or-later AND LGPL-2.0-or-later
 
 # Build only for architectures that have a kernel
 ExclusiveArch: %{kernel_arches}
@@ -45,16 +45,13 @@ Source2:       libguestfs.keyring
 Source3:       copy-patches.sh
 
 # Patches are maintained in the following repository:
-# https://github.com/rwmjones/guestfs-tools/commits/rhel-9.3
+# https://github.com/rwmjones/guestfs-tools/commits/rhel-9.4
 
 # Patches.
-Patch0001:     0001-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
-Patch0002:     0002-RHEL-builder-Disable-opensuse-repository.patch
-Patch0003:     0003-Remove-virt-dib.patch
-Patch0004:     0004-drivers-Look-up-vendor-and-device-names-in-PCI-and-U.patch
-Patch0005:     0005-update-common-submodule.patch
-Patch0006:     0006-inspector-rename-VGs-and-LVs-in-LUKS-on-LVM-test.patch
-Patch0007:     0007-inspector-test-dev-mapper-VG-LV-translation-in-LUKS-.patch
+Patch0001:     0001-Update-common-submodule.patch
+Patch0002:     0002-builder-Add-a-test-of-the-chown-parameter.patch
+Patch0003:     0003-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
+Patch0004:     0004-RHEL-builder-Disable-opensuse-repository.patch
 
 %if 0%{patches_touch_autotools}
 BuildRequires: autoconf, automake, libtool, gettext-devel
@@ -207,7 +204,7 @@ Virt-tail follows (tails) a log file within a guest, like 'tail -f'.
 
 %package -n virt-win-reg
 Summary:       Access and modify the Windows Registry of a Windows VM
-License:       GPLv2+
+License:       GPL-2.0-or-later
 BuildArch:     noarch
 
 # This replaces the libguestfs-tools package.
@@ -413,6 +410,15 @@ end
 
 
 %changelog
+* Fri Jan 19 2024 Richard W.M. Jones <rjones@redhat.com> - 1.51.6-2
+- Rebase to guestfs-tools 1.51.6
+- Implement --key all:...
+  resolves: RHEL-19030
+- Fix crash because of off-by-one error
+  resolves: RHEL-19062
+- Fix virt-customize --chown invalid format
+  resolves: RHEL-21899
+
 * Thu Jun 08 2023 Laszlo Ersek <lersek@redhat.com> - 1.50.1-3
 - let virt-inspector recognize "--key /dev/mapper/VG-LV:key:password"
 - reenable "make check"; we now use "-cpu max" (libguestfs 30f74f38bd6e)
