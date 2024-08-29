@@ -1,0 +1,536 @@
+From 31b4b33ec87560182f338a088bd242d571bc79e7 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 27 Aug 2024 13:46:46 +0100
+Subject: [PATCH] Update common submodule
+
+Pick up the commits below.  In particular this makes several
+refinements to the Windows firstboot code to make it more reliable.
+
+Fixes: https://issues.redhat.com/browse/RHEL-55824
+
+Ben Brown (1):
+      Initialise bar->fp as NULL
+
+Richard W.M. Jones (16):
+      mlcustomize: Update virt-customize generated files
+      options: Allow nbd+unix:// URIs
+      mlcustomize: Add virt-customize --inject-blnsvr generated files
+      mlcustomize: Add Inject_virtio_win.inject_blnsvr implementation
+      mlcustomize: firstboot: Use Linux path for Powershell script path
+      mlcustomize: firstboot: Use powershell.exe instead of path
+      mlcustomize: firstboot: Use Powershell -NoProfile flag
+      mlcustomize: Revert delay installation of qemu-ga MSI
+      mldrivers/linux_kernels.ml: Prefix general information with ^info:
+      mlcustomize: Use Start-Process -Wait to run qemu-ga installer
+      mlcustomize: Add Firstboot.firstboot_dir function
+      mlcustomize: Place powershell scripts into <firstboot_dir>\Temp
+      mlcustomize: Inject qemu-ga & blnsvr into <firstboot_dir>/Temp
+      mlcustomize: Write qemu-ga log file name to log.txt
+      mlcustomize: Add some comments to firstboot batch file
+      mlcustomize: Reboot Windows between each firstboot script
+---
+ common                     | 2 +-
+ customize/customize_run.ml | 3 +++
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+Submodule common 54869c987..a78839676:
+diff --git a/common/mlcustomize/customize-synopsis.pod b/common/mlcustomize/customize-synopsis.pod
+index bb0ce1255..957de8cf2 100644
+--- a/common/mlcustomize/customize-synopsis.pod
++++ b/common/mlcustomize/customize-synopsis.pod
+@@ -3,16 +3,16 @@
+     [--copy SOURCE:DEST] [--copy-in LOCALPATH:REMOTEDIR]
+     [--delete PATH] [--edit FILE:EXPR] [--firstboot SCRIPT]
+     [--firstboot-command 'CMD+ARGS'] [--firstboot-install PKG,PKG..]
+-    [--hostname HOSTNAME] [--inject-qemu-ga METHOD]
+-    [--inject-virtio-win METHOD] [--install PKG,PKG..]
+-    [--link TARGET:LINK[:LINK..]] [--mkdir DIR] [--move SOURCE:DEST]
+-    [--password USER:SELECTOR] [--root-password SELECTOR]
+-    [--run SCRIPT] [--run-command 'CMD+ARGS'] [--scrub FILE]
+-    [--sm-attach SELECTOR] [--sm-register] [--sm-remove]
+-    [--sm-unregister] [--ssh-inject USER[:SELECTOR]]
+-    [--tar-in TARFILE:REMOTEDIR] [--timezone TIMEZONE] [--touch FILE]
+-    [--truncate FILE] [--truncate-recursive PATH]
+-    [--uninstall PKG,PKG..] [--update] [--upload FILE:DEST]
+-    [--write FILE:CONTENT] [--no-logfile]
++    [--hostname HOSTNAME]
++    [--inject-qemu-ga METHOD] [--inject-virtio-win METHOD]
++    [--install PKG,PKG..] [--link TARGET:LINK[:LINK..]] [--mkdir DIR]
++    [--move SOURCE:DEST] [--password USER:SELECTOR]
++    [--root-password SELECTOR] [--run SCRIPT]
++    [--run-command 'CMD+ARGS'] [--scrub FILE] [--sm-attach SELECTOR]
++    [--sm-register] [--sm-remove] [--sm-unregister]
++    [--ssh-inject USER[:SELECTOR]] [--tar-in TARFILE:REMOTEDIR]
++    [--timezone TIMEZONE] [--touch FILE] [--truncate FILE]
++    [--truncate-recursive PATH] [--uninstall PKG,PKG..] [--update]
++    [--upload FILE:DEST] [--write FILE:CONTENT] [--no-logfile]
+     [--password-crypto md5|sha256|sha512] [--no-selinux-relabel]
+     [--selinux-relabel] [--sm-credentials SELECTOR]
+diff --git a/common/mlcustomize/customize_cmdline.ml b/common/mlcustomize/customize_cmdline.ml
+index 48ee33445..c4d6a77d5 100644
+--- a/common/mlcustomize/customize_cmdline.ml
++++ b/common/mlcustomize/customize_cmdline.ml
+@@ -61,6 +61,8 @@ and op = [
+       (* --firstboot-install PKG,PKG.. *)
+   | `Hostname of string
+       (* --hostname HOSTNAME *)
++  | `InjectBalloonServer of string
++      (* --inject-blnsvr METHOD *)
+   | `InjectQemuGA of string
+       (* --inject-qemu-ga METHOD *)
+   | `InjectVirtioWin of string
+diff --git a/common/mlcustomize/customize_cmdline.mli b/common/mlcustomize/customize_cmdline.mli
+index 51a156eae..ee62961a1 100644
+--- a/common/mlcustomize/customize_cmdline.mli
++++ b/common/mlcustomize/customize_cmdline.mli
+@@ -53,6 +53,8 @@ and op = [
+       (* --firstboot-install PKG,PKG.. *)
+   | `Hostname of string
+       (* --hostname HOSTNAME *)
++  | `InjectBalloonServer of string
++      (* --inject-blnsvr METHOD *)
+   | `InjectQemuGA of string
+       (* --inject-qemu-ga METHOD *)
+   | `InjectVirtioWin of string
+diff --git a/common/mlcustomize/firstboot.ml b/common/mlcustomize/firstboot.ml
+index 5dc012340..52e76401e 100644
+--- a/common/mlcustomize/firstboot.ml
++++ b/common/mlcustomize/firstboot.ml
+@@ -239,7 +239,22 @@ WantedBy=%s
+ end
+ 
+ module Windows = struct
+-  let rec install_service (g : Guestfs.guestfs) root =
++  (* Create and return the firstboot directory. *)
++  let create_firstboot_dir (g : Guestfs.guestfs) =
++    let rec loop firstboot_dir firstboot_dir_win = function
++      | [] -> firstboot_dir, firstboot_dir_win
++      | dir :: path ->
++         let firstboot_dir =
++           if firstboot_dir = "" then "/" ^ dir else firstboot_dir // dir in
++         let firstboot_dir_win = firstboot_dir_win ^ "\\" ^ dir in
++         let firstboot_dir = g#case_sensitive_path firstboot_dir in
++         g#mkdir_p firstboot_dir;
++         loop firstboot_dir firstboot_dir_win path
++    in
++    loop "" "C:" ["Program Files"; "Guestfs"; "Firstboot"]
++
++  let rec install_service (g : Guestfs.guestfs) root
++            firstboot_dir firstboot_dir_win =
+     (* Either rhsrvany.exe or pvvxsvc.exe must exist.
+      *
+      * (Check also that it's not a dangling symlink but a real file).
+@@ -254,20 +269,7 @@ module Windows = struct
+        error (f_"One of rhsrvany.exe or pvvxsvc.exe is missing in %s.  One of them is required in order to install Windows firstboot scripts.  You can get one by building rhsrvany (https://github.com/rwmjones/rhsrvany)")
+              (virt_tools_data_dir ()) in
+ 
+-    (* Create a directory for firstboot files in the guest. *)
+-    let firstboot_dir, firstboot_dir_win =
+-      let rec loop firstboot_dir firstboot_dir_win = function
+-        | [] -> firstboot_dir, firstboot_dir_win
+-        | dir :: path ->
+-          let firstboot_dir =
+-            if firstboot_dir = "" then "/" ^ dir else firstboot_dir // dir in
+-          let firstboot_dir_win = firstboot_dir_win ^ "\\" ^ dir in
+-          let firstboot_dir = g#case_sensitive_path firstboot_dir in
+-          g#mkdir_p firstboot_dir;
+-          loop firstboot_dir firstboot_dir_win path
+-      in
+-      loop "" "C:" ["Program Files"; "Guestfs"; "Firstboot"] in
+-
++    (* Create a directory for firstboot scripts in the guest. *)
+     g#mkdir_p (firstboot_dir // "scripts");
+ 
+     (* Copy pvvxsvc or rhsrvany to the guest. *)
+@@ -276,6 +278,9 @@ module Windows = struct
+     (* Write a firstboot.bat control script which just runs the other
+      * scripts in the directory.  Note we need to use CRLF line endings
+      * in this script.
++     *
++     * XXX It would be better to use powershell here.  For some ideas see
++     * https://github.com/HCK-CI/HLK-Setup-Scripts/
+      *)
+     let firstboot_script = sprintf "\
+ @echo off
+@@ -297,6 +302,7 @@ if not exist \"%%scripts_done%%\" (
+   mkdir \"%%scripts_done%%\"
+ )
+ 
++:: Pick the next script to run.
+ for %%%%f in (\"%%scripts%%\"\\*.bat) do (
+   echo running \"%%%%f\"
+   move \"%%%%f\" \"%%scripts_done%%\"
+@@ -305,8 +311,17 @@ for %%%%f in (\"%%scripts%%\"\\*.bat) do (
+   set elvl=!errorlevel!
+   echo .... exit code !elvl!
+   popd
++
++  :: Reboot the computer.  This is necessary to free any locked
++  :: files which may prevent later scripts from running.
++  shutdown /r /t 0 /y
++
++  :: Exit the script (in case shutdown returns before rebooting).
++  :: On next boot, the whole firstboot service will be called again.
++  exit /b
+ )
+ 
++:: Fallthrough here if there are no scripts.
+ echo uninstalling firstboot service
+ \"%%firstboot%%\\%s\" -s firstboot uninstall
+ " firstboot_dir_win srvany in
+@@ -339,11 +354,25 @@ echo uninstalling firstboot service
+             "PWD", REG_SZ firstboot_dir_win ];
+         ] in
+         reg_import reg regedits
+-      );
+-
+-    firstboot_dir
++      )
+ end
+ 
++let firstboot_dir (g : Guestfs.guestfs) root =
++  let typ = g#inspect_get_type root in
++
++  match typ with
++  | "linux" ->
++     let dir = Linux.firstboot_dir in
++     g#mkdir_p dir;
++     dir, None
++
++  | "windows" ->
++     let dir, dir_win = Windows.create_firstboot_dir g in
++     dir, Some dir_win
++
++  | _ ->
++    error (f_"guest type %s is not supported") typ
++
+ let script_count = ref 0
+ 
+ let add_firstboot_script (g : Guestfs.guestfs) root ?(prio = 5000) name
+@@ -363,7 +392,8 @@ let add_firstboot_script (g : Guestfs.guestfs) root ?(prio = 5000) name
+     g#chmod 0o755 filename
+ 
+   | "windows", _ ->
+-    let firstboot_dir = Windows.install_service g root in
++    let firstboot_dir, firstboot_dir_win = Windows.create_firstboot_dir g in
++    Windows.install_service g root firstboot_dir firstboot_dir_win;
+     let filename = firstboot_dir // "scripts" // filename ^ ".bat" in
+     g#write filename (String.unix2dos content)
+ 
+@@ -382,21 +412,18 @@ let add_firstboot_powershell g root ?prio name code =
+    *)
+   assert (g#inspect_get_type root = "windows");
+ 
+-  let windows_systemroot = g#inspect_get_windows_systemroot root in
+-
+-  (* Create the temporary directory to put the Powershell file. *)
+-  let tempdir = sprintf "%s/Temp" windows_systemroot in
++  (* Place the Powershell script into firstboot_dir/Temp *)
++  let firstboot_dir, firstboot_dir_win = Windows.create_firstboot_dir g in
++  let tempdir = sprintf "%s/Temp" firstboot_dir in
+   g#mkdir_p tempdir;
++
++  let ps_path = sprintf "%s/%s.ps1" tempdir name in
++  let ps_path_win = sprintf "%s\\Temp\\%s.ps1" firstboot_dir_win name in
+   let code = String.concat "\r\n" code ^ "\r\n" in
+-  g#write (sprintf "%s/%s" tempdir name) code;
++  g#write ps_path code;
+ 
+-  (* Powershell interpreter.  Should we check this exists? XXX *)
+-  let ps_exe =
+-    windows_systemroot ^
+-    "\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" in
+-
+-  (* Windows path to the Powershell script. *)
+-  let ps_path = windows_systemroot ^ "\\Temp\\" ^ name in
+-
+-  let fb = sprintf "%s -ExecutionPolicy ByPass -file %s" ps_exe ps_path in
++  (* Create a regular firstboot bat that just invokes powershell *)
++  let fb =
++    sprintf "powershell.exe -ExecutionPolicy ByPass -NoProfile -file \"%s\""
++      ps_path_win in
+   add_firstboot_script g root ?prio name fb
+diff --git a/common/mlcustomize/firstboot.mli b/common/mlcustomize/firstboot.mli
+index 8231af658..34ff06901 100644
+--- a/common/mlcustomize/firstboot.mli
++++ b/common/mlcustomize/firstboot.mli
+@@ -16,6 +16,23 @@
+  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+  *)
+ 
++val firstboot_dir : Guestfs.guestfs -> string -> string * string option
++(** [firstboot_dir g root]
++    returns the path of the firstboot directory, creating it in
++    the guest if necessary.
++
++    This returns the name of the directory as a guestfs path, and
++    optionally the name as a Windows path (only for Windows guests).
++
++    For Linux this could be [/usr/lib/virt-sysprep, None]
++
++    For Windows this could be ["/Program Files/Guestfs/Firstboot",
++    Some "C:\Program Files\Guestfs\Firstboot"]
++
++    Additional files that are used during firstboot can be placed
++    in this directory, but be careful not to conflict with files
++    and scripts added by the firstboot process itself. *)
++
+ val add_firstboot_script : Guestfs.guestfs -> string -> ?prio:int -> string ->
+                            string -> unit
+   (** [add_firstboot_script g root prio name content] adds a firstboot
+diff --git a/common/mlcustomize/inject_virtio_win.ml b/common/mlcustomize/inject_virtio_win.ml
+index 2a30b2008..afec1e456 100644
+--- a/common/mlcustomize/inject_virtio_win.ml
++++ b/common/mlcustomize/inject_virtio_win.ml
+@@ -24,6 +24,8 @@ open Common_gettext.Gettext
+ 
+ open Regedit
+ 
++let re_blnsvr = PCRE.compile ~caseless:true "\\bblnsvr\\.exe$"
++
+ type t = {
+   g : Guestfs.guestfs; (** guestfs handle *)
+ 
+@@ -261,12 +263,38 @@ let rec inject_virtio_win_drivers ({ g } as t) reg =
+     }
+   )
+ 
+-and inject_qemu_ga t =
+-  let msi_files = copy_qemu_ga t in
++and inject_qemu_ga ({ g; root } as t) =
++  (* Copy the qemu-ga MSI(s) to the guest. *)
++  let dir, dir_win = Firstboot.firstboot_dir g root in
++  let dir_win = Option.value dir_win ~default:dir in
++  let tempdir = sprintf "%s/Temp" dir in
++  let tempdir_win = sprintf "%s\\Temp" dir_win in
++  g#mkdir_p tempdir;
++
++  let msi_files = copy_qemu_ga t tempdir in
+   if msi_files <> [] then
+-    configure_qemu_ga t msi_files;
++    configure_qemu_ga t tempdir_win msi_files;
+   msi_files <> [] (* return true if we found some qemu-ga MSI files *)
+ 
++and inject_blnsvr ({ g; root } as t) =
++  (* Copy the files to the guest. *)
++  let dir, dir_win = Firstboot.firstboot_dir g root in
++  let dir_win = Option.value dir_win ~default:dir in
++  let tempdir = sprintf "%s/Temp" dir in
++  let tempdir_win = sprintf "%s\\Temp" dir_win in
++  g#mkdir_p tempdir;
++
++  let files = copy_blnsvr t tempdir in
++  match files with
++  | [] -> false (* Didn't find or install anything. *)
++
++  (* We usually find blnsvr.exe in two locations (drivers/by-os and
++   * drivers/by-driver).  Pick the first.
++   *)
++  | blnsvr :: _ ->
++     configure_blnsvr t tempdir_win blnsvr;
++     true
++
+ and add_guestor_to_registry t ((g, root) as reg) drv_name drv_pciid =
+   let ddb_node = g#hivex_node_get_child root "DriverDatabase" in
+ 
+@@ -346,8 +374,13 @@ and copy_drivers t driverdir =
+       (fun () ->
+         error (f_"root directory ‘/’ is missing from the virtio-win directory or ISO.\n\nThis should not happen and may indicate that virtio-win or virt-v2v is broken in some way.  Please report this as a bug with a full debug log."))
+ 
+-and copy_qemu_ga t =
+-  copy_from_virtio_win t "/" "/" (virtio_iso_path_matches_qemu_ga t)
++and copy_qemu_ga t tempdir =
++  copy_from_virtio_win t "/" tempdir (virtio_iso_path_matches_qemu_ga t)
++    (fun () ->
++      error (f_"root directory ‘/’ is missing from the virtio-win directory or ISO.\n\nThis should not happen and may indicate that virtio-win or virt-v2v is broken in some way.  Please report this as a bug with a full debug log."))
++
++and copy_blnsvr t tempdir =
++  copy_from_virtio_win t "/" tempdir (virtio_iso_path_matches_blnsvr t)
+     (fun () ->
+       error (f_"root directory ‘/’ is missing from the virtio-win directory or ISO.\n\nThis should not happen and may indicate that virtio-win or virt-v2v is broken in some way.  Please report this as a bug with a full debug log."))
+ 
+@@ -513,6 +546,10 @@ and virtio_iso_path_matches_qemu_ga t path =
+   | ("x86_64", "rhev-qga64.msi") -> true
+   | _ -> false
+ 
++(* Find blnsvr for the current Windows version. *)
++and virtio_iso_path_matches_blnsvr t path =
++  virtio_iso_path_matches_guest_os t path && PCRE.matches re_blnsvr path
++
+ (* Look up in libosinfo for the OS, and copy all the locally
+  * available files specified as drivers for that OS to the [destdir].
+  *
+@@ -552,37 +589,35 @@ and copy_from_libosinfo { g; i_osinfo; i_arch } destdir =
+     ) driver.Libosinfo.files
+   with Not_found -> []
+ 
+-and configure_qemu_ga t files =
++(* Install qemu-ga.  [files] is the non-empty list of possible qemu-ga
++ * installers we detected.
++ *)
++and configure_qemu_ga t tempdir_win files =
++  let script = ref [] in
++  let add = List.push_back script in
++
++  add "# Virt-v2v script which installs QEMU Guest Agent";
++  add "";
++  add "# Uncomment this line for lots of debug output.";
++  add "# Set-PSDebug -Trace 2";
++  add "";
++  add "Write-Host Installing QEMU Guest Agent";
++  add "";
++  add "# Run qemu-ga installers";
+   List.iter (
+-    fun msi_path ->
+-      (* Windows is a trashfire.
+-       * https://stackoverflow.com/a/18730884
+-       * https://bugzilla.redhat.com/show_bug.cgi?id=1895323
+-       *)
+-      let psh_script = ref [] in
+-      let add = List.push_back psh_script in
++    fun msi ->
++      add (sprintf "Write-Host \"Writing log to %s\\%s.log\""
++             tempdir_win msi);
++      (* [`] is an escape char for quotes *)
++      add (sprintf "Start-Process -Wait -FilePath \"%s\\%s\" -ArgumentList \"/norestart\",\"/qn\",\"/l+*vx\",\"`\"%s\\%s.log`\"\""
++             tempdir_win msi tempdir_win msi)
++  ) files;
+ 
+-      add "# Uncomment this line for lots of debug output.";
+-      add "# Set-PSDebug -Trace 2";
+-      add "";
+-      add "Write-Host Removing any previously scheduled qemu-ga installation";
+-      add "schtasks.exe /Delete /TN Firstboot-qemu-ga /F";
+-      add "";
+-      add (sprintf
+-             "Write-Host Scheduling delayed installation of qemu-ga from %s"
+-             msi_path);
+-      add "$d = (get-date).AddSeconds(120)";
+-      add "$dtfinfo = [System.Globalization.DateTimeFormatInfo]::CurrentInfo";
+-      add "$sdp = $dtfinfo.ShortDatePattern";
+-      add "$sdp = $sdp -replace 'y+', 'yyyy'";
+-      add "$sdp = $sdp -replace 'M+', 'MM'";
+-      add "$sdp = $sdp -replace 'd+', 'dd'";
+-      add "schtasks.exe /Create /SC ONCE `";
+-      add "  /ST $d.ToString('HH:mm') /SD $d.ToString($sdp) `";
+-      add "  /RU SYSTEM /TN Firstboot-qemu-ga `";
+-      add (sprintf "  /TR \"C:\\%s /forcerestart /qn /l+*vx C:\\%s.log\""
+-             msi_path msi_path);
++  Firstboot.add_firstboot_powershell t.g t.root "install-qemu-ga" !script
+ 
+-      Firstboot.add_firstboot_powershell t.g t.root
+-        (sprintf "install-%s.ps1" msi_path) !psh_script;
+-  ) files
++and configure_blnsvr t tempdir_win blnsvr =
++  let cmd = sprintf "\
++                     @echo off\n\
++                     echo Installing %s\n\
++                     \"%s\\%s\" -i\n" blnsvr tempdir_win blnsvr in
++  Firstboot.add_firstboot_script t.g t.root "install-blnsvr" cmd
+diff --git a/common/mlcustomize/inject_virtio_win.mli b/common/mlcustomize/inject_virtio_win.mli
+index d14f04973..d273c4dd3 100644
+--- a/common/mlcustomize/inject_virtio_win.mli
++++ b/common/mlcustomize/inject_virtio_win.mli
+@@ -93,3 +93,11 @@ val inject_qemu_ga : t -> bool
+     the MSI(s).
+ 
+     Returns [true] iff we were able to inject qemu-ga. *)
++
++val inject_blnsvr : t -> bool
++(** Inject the Balloon Server ([blnsvr.exe]) into a Windows guest.
++
++    A firstboot script is also injected which should install
++    the server by running [blnsvr -i].
++
++    Returns [true] iff we were able to inject the Balloon Server. *)
+diff --git a/common/mldrivers/linux_kernels.ml b/common/mldrivers/linux_kernels.ml
+index 23ff76a55..e0b6b8a00 100644
+--- a/common/mldrivers/linux_kernels.ml
++++ b/common/mldrivers/linux_kernels.ml
+@@ -102,7 +102,7 @@ let detect_kernels (g : G.guestfs) root bootloader apps =
+     ) apps in
+     if verbose () then (
+       let names = List.map (fun { G.app2_name = name } -> name) kernel_pkgs in
+-      eprintf "candidate kernel packages in this guest: %s%!\n"
++      eprintf "info: candidate kernel packages in this guest: %s%!\n"
+         (String.concat " " names)
+     );
+     List.filter_map (
+@@ -306,7 +306,7 @@ let detect_kernels (g : G.guestfs) root bootloader apps =
+     ) kernel_pkgs in
+ 
+   if verbose () then (
+-    eprintf "installed kernel packages in this guest:\n";
++    eprintf "info: installed kernel packages in this guest:\n";
+     List.iter (print_kernel_info stderr "\t") installed_kernels;
+     flush stderr
+   );
+@@ -343,7 +343,7 @@ let detect_kernels (g : G.guestfs) root bootloader apps =
+     ) vmlinuzes in
+ 
+   if verbose () then (
+-    eprintf "kernels offered by the bootloader in this guest (first in list is default):\n";
++    eprintf "info: kernels offered by the bootloader in this guest (first in list is default):\n";
+     List.iter (print_kernel_info stderr "\t") bootloader_kernels;
+     flush stderr
+   );
+diff --git a/common/options/uri.c b/common/options/uri.c
+index 84d393c1e..9180d6a27 100644
+--- a/common/options/uri.c
++++ b/common/options/uri.c
+@@ -99,7 +99,7 @@ is_uri (const char *arg)
+     return 0;
+ 
+   for (p--; p >= arg; p--) {
+-    if (!c_islower (*p))
++    if (! (c_islower (*p) || *p == '+'))
+       return 0;
+   }
+ 
+@@ -148,7 +148,10 @@ parse (const char *arg, char **path_ret, char **protocol_ret,
+   }
+   */
+ 
+-  *protocol_ret = strdup (uri->scheme);
++  if (STREQ (uri->scheme, "nbd+unix"))
++    *protocol_ret = strdup ("nbd");
++  else
++    *protocol_ret = strdup (uri->scheme);
+   if (*protocol_ret == NULL) {
+     perror ("strdup: protocol");
+     return -1;
+@@ -194,7 +197,7 @@ parse (const char *arg, char **path_ret, char **protocol_ret,
+   if (path && path[0] == '/' &&
+       (STREQ (uri->scheme, "gluster") ||
+        STREQ (uri->scheme, "iscsi") ||
+-       STREQ (uri->scheme, "nbd") ||
++       STRPREFIX (uri->scheme, "nbd") ||
+        STREQ (uri->scheme, "rbd") ||
+        STREQ (uri->scheme, "sheepdog")))
+     path++;
+diff --git a/common/progress/progress.c b/common/progress/progress.c
+index e4b30663f..5848abd70 100644
+--- a/common/progress/progress.c
++++ b/common/progress/progress.c
+@@ -123,6 +123,7 @@ progress_bar_init (unsigned flags)
+     bar->machine_readable = 1;
+     bar->utf8_mode = 0;
+     bar->have_terminfo = 0;
++    bar->fp = NULL;
+   } else {
+     bar->machine_readable = 0;
+ 
+diff --git a/customize/customize_run.ml b/customize/customize_run.ml
+index 1314d6e30..afced8c84 100644
+--- a/customize/customize_run.ml
++++ b/customize/customize_run.ml
+@@ -216,6 +216,9 @@ let run (g : G.guestfs) root (ops : ops) =
+       if not (Hostname.set_hostname g root hostname) then
+         warning (f_"hostname could not be set for this type of guest")
+ 
++    | `InjectBalloonServer _ ->
++      error "injecting the balloon server is not supported in RHEL 9.4, use RHEL 9.5 or above"
++
+     | `InjectQemuGA meth ->
+        (match get_virtio_win_handle "--inject-qemu-ga" meth with
+         | None -> ()

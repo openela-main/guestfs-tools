@@ -19,7 +19,7 @@
 Summary:       Tools to access and modify virtual machine disk images
 Name:          guestfs-tools
 Version:       1.51.6
-Release:       2%{?dist}
+Release:       3%{?dist}
 License:       GPL-2.0-or-later AND LGPL-2.0-or-later
 
 # Build only for architectures that have a kernel
@@ -52,6 +52,7 @@ Patch0001:     0001-Update-common-submodule.patch
 Patch0002:     0002-builder-Add-a-test-of-the-chown-parameter.patch
 Patch0003:     0003-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
 Patch0004:     0004-RHEL-builder-Disable-opensuse-repository.patch
+Patch0005:     0005-Update-common-submodule.patch
 
 %if 0%{patches_touch_autotools}
 BuildRequires: autoconf, automake, libtool, gettext-devel
@@ -410,6 +411,10 @@ end
 
 
 %changelog
+* Tue Aug 27 2024 Richard W.M. Jones <rjones@redhat.com> - 1.51.6-3
+- Reboot Windows between each firstboot script to improve reliability
+  resolves: RHEL-55824
+
 * Fri Jan 19 2024 Richard W.M. Jones <rjones@redhat.com> - 1.51.6-2
 - Rebase to guestfs-tools 1.51.6
 - Implement --key all:...
