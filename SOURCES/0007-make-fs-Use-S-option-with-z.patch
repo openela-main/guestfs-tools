@@ -1,0 +1,43 @@
+From 51b0bf74b249ac6646b7e083a678553fc40d44d7 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 7 Mar 2024 12:00:45 +0000
+Subject: [PATCH] make-fs: Use -S option with -z
+
+Basically the file -z option is broken for distributions that enable
+seccomp support in the 'file' command.  Turn off seccomp when we know
+we'll be using -z.
+
+We hit this before in the libguestfs daemon:
+https://github.com/libguestfs/libguestfs/issues/100
+
+It was reported upstream but the fix was rejected:
+https://bugs.astron.com/view.php?id=406
+
+See also libguestfs commit 23986d3c4f4d1f9cbac44cc743d3e6af721e4237
+("file: Use -S option with -z").
+
+Note this requires file > 5.32.  We could make it work for earlier
+versions of file with some extra work:
+https://listman.redhat.com/archives/libguestfs/2023-September/032613.html
+& libguestfs commit c95d8c4cf64142bb707b42c32cf3e1ba3c4a5eb1
+
+Reported-by: Jax Young
+Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2266201
+(cherry picked from commit a706f6f55345b06578fd1ca4af531524dc2131fb)
+---
+ make-fs/make-fs.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/make-fs/make-fs.c b/make-fs/make-fs.c
+index 7837b61be..b8aebccfb 100644
+--- a/make-fs/make-fs.c
++++ b/make-fs/make-fs.c
+@@ -457,7 +457,7 @@ estimate_input (const char *input, uint64_t *estimate_rtn, char **ifmt_rtn)
+   }
+   else {
+     argv[0] = "file";
+-    argv[1] = "-bsLz";
++    argv[1] = "-bsSLz";
+     argv[2] = input;
+     argv[3] = NULL;
+ 

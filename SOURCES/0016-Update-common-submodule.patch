@@ -1,0 +1,57 @@
+From 924bf9e6b76fa6c910c1708a20e0716384fbbe07 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Sat, 10 Aug 2024 14:17:51 +0100
+Subject: [PATCH] Update common submodule
+
+Further refinements to Windows firstboot code.
+
+Richard W.M. Jones (2):
+      mlcustomize: Add some comments to firstboot batch file
+      mlcustomize: Reboot Windows between each firstboot script
+
+(cherry picked from commit d7719d6954f48c3a395da7486bcf55fbac66ea07)
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common 7b84a370e..a78839676:
+diff --git a/common/mlcustomize/firstboot.ml b/common/mlcustomize/firstboot.ml
+index 3bbba714d..52e76401e 100644
+--- a/common/mlcustomize/firstboot.ml
++++ b/common/mlcustomize/firstboot.ml
+@@ -278,6 +278,9 @@ module Windows = struct
+     (* Write a firstboot.bat control script which just runs the other
+      * scripts in the directory.  Note we need to use CRLF line endings
+      * in this script.
++     *
++     * XXX It would be better to use powershell here.  For some ideas see
++     * https://github.com/HCK-CI/HLK-Setup-Scripts/
+      *)
+     let firstboot_script = sprintf "\
+ @echo off
+@@ -299,6 +302,7 @@ if not exist \"%%scripts_done%%\" (
+   mkdir \"%%scripts_done%%\"
+ )
+ 
++:: Pick the next script to run.
+ for %%%%f in (\"%%scripts%%\"\\*.bat) do (
+   echo running \"%%%%f\"
+   move \"%%%%f\" \"%%scripts_done%%\"
+@@ -307,8 +311,17 @@ for %%%%f in (\"%%scripts%%\"\\*.bat) do (
+   set elvl=!errorlevel!
+   echo .... exit code !elvl!
+   popd
++
++  :: Reboot the computer.  This is necessary to free any locked
++  :: files which may prevent later scripts from running.
++  shutdown /r /t 0 /y
++
++  :: Exit the script (in case shutdown returns before rebooting).
++  :: On next boot, the whole firstboot service will be called again.
++  exit /b
+ )
+ 
++:: Fallthrough here if there are no scripts.
+ echo uninstalling firstboot service
+ \"%%firstboot%%\\%s\" -s firstboot uninstall
+ " firstboot_dir_win srvany in

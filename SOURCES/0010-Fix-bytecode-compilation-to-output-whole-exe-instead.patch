@@ -1,0 +1,28 @@
+From 6ea88c2011b02a47058ba6d89af156983bd52a91 Mon Sep 17 00:00:00 2001
+From: Jerry James <loganjerry@gmail.com>
+Date: Fri, 12 Apr 2024 20:11:50 +0100
+Subject: [PATCH] Fix bytecode compilation to output whole exe instead of using
+ -custom
+
+These binaries are more resistant to being stripped.
+
+Reported-by: Ilya Leoshkevich
+Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2274708
+(cherry picked from commit c249fd5caca8f1eed439f83e2bb1af46c8a28a27)
+---
+ subdir-rules.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/subdir-rules.mk b/subdir-rules.mk
+index 6bd62b653..051dc9d5a 100644
+--- a/subdir-rules.mk
++++ b/subdir-rules.mk
+@@ -49,7 +49,7 @@ LOG_DRIVER = env $(SHELL) $(top_srcdir)/build-aux/guestfs-test-driver
+ 
+ if !HAVE_OCAMLOPT
+ MLARCHIVE = cma
+-LINK_CUSTOM_OCAMLC_ONLY = -custom
++LINK_CUSTOM_OCAMLC_ONLY = -output-complete-exe
+ BEST = c
+ else
+ MLARCHIVE = cmxa

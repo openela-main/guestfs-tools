@@ -19,7 +19,7 @@
 Summary:       Tools to access and modify virtual machine disk images
 Name:          guestfs-tools
 Version:       1.51.6
-Release:       3%{?dist}
+Release:       5%{?dist}
 License:       GPL-2.0-or-later AND LGPL-2.0-or-later
 
 # Build only for architectures that have a kernel
@@ -45,14 +45,25 @@ Source2:       libguestfs.keyring
 Source3:       copy-patches.sh
 
 # Patches are maintained in the following repository:
-# https://github.com/rwmjones/guestfs-tools/commits/rhel-9.4
+# https://github.com/rwmjones/guestfs-tools/commits/rhel-9.5
 
 # Patches.
 Patch0001:     0001-Update-common-submodule.patch
 Patch0002:     0002-builder-Add-a-test-of-the-chown-parameter.patch
 Patch0003:     0003-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
 Patch0004:     0004-RHEL-builder-Disable-opensuse-repository.patch
-Patch0005:     0005-Update-common-submodule.patch
+Patch0005:     0005-inspector-inspector.c-Remove-extra-cases-covered-by-.patch
+Patch0006:     0006-m4-guestfs-c.m4-Re-add-.-configure-enable-werror.patch
+Patch0007:     0007-make-fs-Use-S-option-with-z.patch
+Patch0008:     0008-sysprep-Make-clearer-that-we-do-not-support-Windows.patch
+Patch0009:     0009-build-Use-DISTCLEANFILES-for-a-generated-but-few-rar.patch
+Patch0010:     0010-Fix-bytecode-compilation-to-output-whole-exe-instead.patch
+Patch0011:     0011-po-docs-Run-po4a-translate-and-sed-commands-separate.patch
+Patch0012:     0012-po-docs-Remove-virt-dib-from-list-of-translated-man-.patch
+Patch0013:     0013-Update-common-submodule.patch
+Patch0014:     0014-customize-Implement-inject-blnsvr-operation.patch
+Patch0015:     0015-Update-common-submodule.patch
+Patch0016:     0016-Update-common-submodule.patch
 
 %if 0%{patches_touch_autotools}
 BuildRequires: autoconf, automake, libtool, gettext-devel
@@ -411,9 +422,15 @@ end
 
 
 %changelog
-* Tue Aug 27 2024 Richard W.M. Jones <rjones@redhat.com> - 1.51.6-3
+* Tue Aug 27 2024 Richard W.M. Jones <rjones@redhat.com> - 1.51.6-5
 - Reboot Windows between each firstboot script to improve reliability
-  resolves: RHEL-55824
+  resolves: RHEL-55759
+
+* Thu May 16 2024 Richard W.M. Jones <rjones@redhat.com> - 1.51.6-4
+- Add support for nbd+unix:// URIs
+  resolves: RHEL-33956
+- customize: Implement --inject-blnsvr operation
+  resolves: RHEL-36634
 
 * Fri Jan 19 2024 Richard W.M. Jones <rjones@redhat.com> - 1.51.6-2
 - Rebase to guestfs-tools 1.51.6
