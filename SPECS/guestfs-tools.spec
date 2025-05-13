@@ -11,15 +11,15 @@
 %global patches_touch_autotools 1
 
 # The source directory.
-%global source_directory 1.51-development
+%global source_directory 1.52-stable
 
 # Filter perl provides.
 %{?perl_default_filter}
 
 Summary:       Tools to access and modify virtual machine disk images
 Name:          guestfs-tools
-Version:       1.51.6
-Release:       5%{?dist}
+Version:       1.52.2
+Release:       3%{?dist}
 License:       GPL-2.0-or-later AND LGPL-2.0-or-later
 
 # Build only for architectures that have a kernel
@@ -45,25 +45,17 @@ Source2:       libguestfs.keyring
 Source3:       copy-patches.sh
 
 # Patches are maintained in the following repository:
-# https://github.com/rwmjones/guestfs-tools/commits/rhel-9.5
+# https://github.com/rwmjones/guestfs-tools/commits/rhel-9.6
 
 # Patches.
-Patch0001:     0001-Update-common-submodule.patch
-Patch0002:     0002-builder-Add-a-test-of-the-chown-parameter.patch
-Patch0003:     0003-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
-Patch0004:     0004-RHEL-builder-Disable-opensuse-repository.patch
-Patch0005:     0005-inspector-inspector.c-Remove-extra-cases-covered-by-.patch
-Patch0006:     0006-m4-guestfs-c.m4-Re-add-.-configure-enable-werror.patch
-Patch0007:     0007-make-fs-Use-S-option-with-z.patch
-Patch0008:     0008-sysprep-Make-clearer-that-we-do-not-support-Windows.patch
-Patch0009:     0009-build-Use-DISTCLEANFILES-for-a-generated-but-few-rar.patch
-Patch0010:     0010-Fix-bytecode-compilation-to-output-whole-exe-instead.patch
-Patch0011:     0011-po-docs-Run-po4a-translate-and-sed-commands-separate.patch
-Patch0012:     0012-po-docs-Remove-virt-dib-from-list-of-translated-man-.patch
-Patch0013:     0013-Update-common-submodule.patch
-Patch0014:     0014-customize-Implement-inject-blnsvr-operation.patch
-Patch0015:     0015-Update-common-submodule.patch
-Patch0016:     0016-Update-common-submodule.patch
+Patch0001:     0001-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
+Patch0002:     0002-RHEL-builder-Disable-opensuse-repository.patch
+Patch0003:     0003-customize-Implement-inject-blnsvr-operation.patch
+Patch0004:     0004-build-Add-new-dependency-on-json-c.patch
+Patch0005:     0005-builder-Replace-jansson-with-json-c.patch
+Patch0006:     0006-build-Remove-Jansson-dependency.patch
+Patch0007:     0007-test-data-phony-fedora-Add-simple-static-bin-sh.patch
+Patch0008:     0008-drivers-Handle-large-output-from-rpm-ql-command.patch
 
 %if 0%{patches_touch_autotools}
 BuildRequires: autoconf, automake, libtool, gettext-devel
@@ -72,7 +64,7 @@ BuildRequires: autoconf, automake, libtool, gettext-devel
 # Basic build requirements.
 BuildRequires: gcc, gcc-c++
 BuildRequires: make
-BuildRequires: libguestfs-devel >= 1:1.49.8-1
+BuildRequires: libguestfs-devel >= 1:1.54.0-4.el9
 BuildRequires: libguestfs-xfs
 BuildRequires: perl(Pod::Simple)
 BuildRequires: perl(Pod::Man)
@@ -82,7 +74,7 @@ BuildRequires: /usr/bin/pod2text
 BuildRequires: po4a
 BuildRequires: pcre2-devel
 BuildRequires: libxml2-devel
-BuildRequires: jansson-devel
+BuildRequires: json-c-devel
 BuildRequires: libvirt-devel
 BuildRequires: libosinfo-devel
 BuildRequires: libxcrypt-devel
@@ -121,9 +113,8 @@ BuildRequires: gnupg2
 %endif
 
 # Ensure a minimum version of libguestfs is installed.  This contains
-# a workaround for openssl bug RHBZ#2133884 and the hang where we
-# called setenv between fork and exec.
-Requires:      libguestfs >= 1.49.6-1
+# new APIs sh-out and command-out, required by virt-drivers.
+Requires:      libguestfs >= 1:1.54.0-4.el9
 
 # For virt-builder:
 Requires:      curl
@@ -422,6 +413,16 @@ end
 
 
 %changelog
+* Tue Feb 25 2025 Richard W.M. Jones <rjones@redhat.com> - 1.52.2-3
+- Fix virt-drivers fails on opensuse guest if kernel-source is installed
+  resolves: RHEL-80214
+
+* Wed Oct 30 2024 Richard W.M. Jones <rjones@redhat.com> - 1.52.2-2
+- Rebase to guestfs-tools 1.52.2
+  resolves: RHEL-56811
+- Replace Jansson with json-c
+  resolves: RHEL-65294
+
 * Tue Aug 27 2024 Richard W.M. Jones <rjones@redhat.com> - 1.51.6-5
 - Reboot Windows between each firstboot script to improve reliability
   resolves: RHEL-55759

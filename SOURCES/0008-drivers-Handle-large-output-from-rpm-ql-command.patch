@@ -1,0 +1,343 @@
+From 777f3ac82c20469c9e438b9fd88a57007fd2c2bb Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Wed, 19 Feb 2025 14:16:13 +0000
+Subject: [PATCH] drivers: Handle large output from 'rpm -ql' command
+
+This requires the new guestfs_sh_out API from libguestfs 1.55.6.
+
+Update common submodule to include:
+
+  Richard W.M. Jones (3):
+      mlstdutils: Reimplement String.find, add String.find_from
+      mlstdutils: Reimplement String.nsplit tail recursively
+      mldrivers: Handle large output from 'rpm -ql' command
+
+Fixes: https://issues.redhat.com/browse/RHEL-80214
+Reported-by: Nijin Ashok
+(cherry picked from commit 5520f1cfae55377c2fe1db3f2974f6006822e0ea)
+---
+ common                  | 2 +-
+ m4/guestfs-libraries.m4 | 5 ++---
+ 2 files changed, 3 insertions(+), 4 deletions(-)
+
+Submodule common 766384a45..ee88791e1:
+diff --git a/common/mldrivers/linux.ml b/common/mldrivers/linux.ml
+index 4e30a8e1f..0dec15495 100644
+--- a/common/mldrivers/linux.ml
++++ b/common/mldrivers/linux.ml
+@@ -58,76 +58,84 @@ and do_remove g root packages =
+ 
+ let file_list_of_package (g : Guestfs.guestfs) root app =
+   let package_format = g#inspect_get_package_format root in
+-  match package_format with
+-  | "deb" ->
+-    let cmd = [| "dpkg"; "-L"; app.G.app2_name |] in
+-    debug "%s" (String.concat " " (Array.to_list cmd));
+-    let files = g#command_lines cmd in
+-    let files = Array.to_list files in
++
++  let cmd =
++    match package_format with
++    | "deb" -> sprintf "dpkg -L %s" (quote app.G.app2_name)
++
++    | "rpm" ->
++       (* Since RPM allows multiple packages installed with the same
++        * name, always check the full NEVR here (RHBZ#1161250).
++        *
++        * In RPM < 4.11 query commands that use the epoch number in the
++        * package name did not work.
++        *
++        * For example:
++        * RHEL 6 (rpm 4.8.0):
++        *   $ rpm -q tar-2:1.23-11.el6.x86_64
++        *   package tar-2:1.23-11.el6.x86_64 is not installed
++        * Fedora 20 (rpm 4.11.2):
++        *   $ rpm -q tar-2:1.26-30.fc20.x86_64
++        *   tar-1.26-30.fc20.x86_64
++        *)
++       let is_rpm_lt_4_11 () =
++         let ver =
++           try
++             (* Since we're going to run 'rpm' below anyway, seems safe
++              * to run it here and assume the binary works.
++              *)
++             let cmd = [| "rpm"; "--version" |] in
++             debug "%s" (String.concat " " (Array.to_list cmd));
++             let ver = g#command_lines cmd in
++             let ver =
++               if Array.length ver > 0 then ver.(0) else raise Not_found in
++             debug "%s" ver;
++             let ver = String.nsplit " " ver in
++             let ver =
++               match ver with
++               | [ "RPM"; "version"; ver ] -> ver
++               | _ -> raise Not_found in
++             if not (PCRE.matches re_version ver) then raise Not_found;
++             (int_of_string (PCRE.sub 1), int_of_string (PCRE.sub 2))
++           with Not_found ->
++             (* 'rpm' not installed? Hmm... *)
++             (0, 0) in
++         ver < (4, 11)
++       in
++       let pkg_name =
++         if app.G.app2_epoch = Int32.zero || is_rpm_lt_4_11 () then
++           sprintf "%s-%s-%s" app.G.app2_name app.G.app2_version
++             app.G.app2_release
++         else
++           sprintf "%s-%ld:%s-%s" app.G.app2_name app.G.app2_epoch
++             app.G.app2_version app.G.app2_release in
++       sprintf "rpm -ql %s" (quote pkg_name)
++
++    | format ->
++       error (f_"don’t know how to get list of files from package using %s")
++         format in
++
++  debug "file_list_of_package: running: %s" cmd;
++
++  (* Some packages have a lot of files, too many to list without
++   * breaking the maximum message size assumption in libguestfs.
++   * To cope with this, use guestfs_sh_out, added in 1.55.6.
++   * https://issues.redhat.com/browse/RHEL-80080
++   *)
++  let tmpfile = Filename.temp_file "v2vcmd" ".out" in
++  On_exit.unlink tmpfile;
++  g#sh_out cmd tmpfile;
++  let files = read_whole_file tmpfile in
++
++  (* RPM prints "(contains no files)" on stdout when a package
++   * has no files in it:
++   * https://github.com/rpm-software-management/rpm/issues/962
++   *)
++  if String.is_prefix files "(contains no files)" then []
++  else (
++    let files = String.nsplit "\n" files in
+     List.sort compare files
+-
+-  | "rpm" ->
+-    (* Since RPM allows multiple packages installed with the same
+-     * name, always check the full NEVR here (RHBZ#1161250).
+-     *
+-     * In RPM < 4.11 query commands that use the epoch number in the
+-     * package name did not work.
+-     *
+-     * For example:
+-     * RHEL 6 (rpm 4.8.0):
+-     *   $ rpm -q tar-2:1.23-11.el6.x86_64
+-     *   package tar-2:1.23-11.el6.x86_64 is not installed
+-     * Fedora 20 (rpm 4.11.2):
+-     *   $ rpm -q tar-2:1.26-30.fc20.x86_64
+-     *   tar-1.26-30.fc20.x86_64
+-     *)
+-    let is_rpm_lt_4_11 () =
+-      let ver =
+-        try
+-          (* Since we're going to run 'rpm' below anyway, seems safe
+-           * to run it here and assume the binary works.
+-           *)
+-          let cmd = [| "rpm"; "--version" |] in
+-          debug "%s" (String.concat " " (Array.to_list cmd));
+-          let ver = g#command_lines cmd in
+-          let ver = if Array.length ver > 0 then ver.(0) else raise Not_found in
+-          debug "%s" ver;
+-          let ver = String.nsplit " " ver in
+-          let ver =
+-            match ver with
+-            | [ "RPM"; "version"; ver ] -> ver
+-            | _ -> raise Not_found in
+-          if not (PCRE.matches re_version ver) then raise Not_found;
+-          (int_of_string (PCRE.sub 1), int_of_string (PCRE.sub 2))
+-        with Not_found ->
+-          (* 'rpm' not installed? Hmm... *)
+-          (0, 0) in
+-      ver < (4, 11)
+-    in
+-    let pkg_name =
+-      if app.G.app2_epoch = Int32.zero || is_rpm_lt_4_11 () then
+-        sprintf "%s-%s-%s" app.G.app2_name app.G.app2_version
+-          app.G.app2_release
+-      else
+-        sprintf "%s-%ld:%s-%s" app.G.app2_name app.G.app2_epoch
+-          app.G.app2_version app.G.app2_release in
+-    let cmd = [| "rpm"; "-ql"; pkg_name |] in
+-    debug "%s" (String.concat " " (Array.to_list cmd));
+-    let files = g#command_lines cmd in
+-    (* RPM prints "(contains no files)" on stdout when a package
+-     * has no files in it:
+-     * https://github.com/rpm-software-management/rpm/issues/962
+-     *)
+-    if files = [| "(contains no files)" |] then
+-      []
+-    else (
+-      let files = Array.to_list files in
+-      List.sort compare files
+-    )
+-
+-  | format ->
+-    error (f_"don’t know how to get list of files from package using %s")
+-      format
++  )
+ 
+ let is_file_owned (g : G.guestfs) root path =
+   let package_format = g#inspect_get_package_format root in
+diff --git a/common/mlstdutils/std_utils.ml b/common/mlstdutils/std_utils.ml
+index 86b21a7c5..1a36ab772 100644
+--- a/common/mlstdutils/std_utils.ml
++++ b/common/mlstdutils/std_utils.ml
+@@ -98,24 +98,27 @@ module String = struct
+       and len = length str in
+       len >= sufflen && sub str (len - sufflen) sufflen = suffix
+ 
+-    let rec find s sub =
+-      let len = length s in
++    let find_from str pos sub =
+       let sublen = length sub in
+-      let rec loop i =
+-        if i <= len-sublen then (
+-          let rec loop2 j =
+-            if j < sublen then (
+-              if s.[i+j] = sub.[j] then loop2 (j+1)
+-              else -1
+-            ) else
+-              i (* found *)
+-          in
+-          let r = loop2 0 in
+-          if r = -1 then loop (i+1) else r
+-        ) else
+-          -1 (* not found *)
+-      in
+-      loop 0
++      if sublen = 0 then
++        0
++      else (
++        let found = ref 0 in
++        let len = length str in
++        try
++          for i = pos to len - sublen do
++            let j = ref 0 in
++            while unsafe_get str (i + !j) = unsafe_get sub !j do
++              incr j;
++              if !j = sublen then begin found := i; raise Exit; end;
++            done;
++          done;
++          -1
++        with
++          Exit -> !found
++      )
++
++    let find str sub = find_from str 0 sub
+ 
+     let rec replace s s1 s2 =
+       let len = length s in
+@@ -145,7 +148,7 @@ module String = struct
+       else if n >= len then str, ""
+       else sub str 0 n, sub str n (len-n)
+ 
+-    let rec split sep str =
++    let split sep str =
+       let seplen = length sep in
+       let strlen = length str in
+       let i = find str sep in
+@@ -154,20 +157,36 @@ module String = struct
+         sub str 0 i, sub str (i + seplen) (strlen - i - seplen)
+       )
+ 
+-    and nsplit ?(max = 0) sep str =
++    let nsplit ?(max = 0) sep str =
+       if max < 0 then
+         invalid_arg "String.nsplit: max parameter should not be negative";
+ 
+-      (* If we reached the limit, OR if the pattern does not match the string
+-       * at all, return the rest of the string as a single element list.
+-       *)
+-      if max = 1 || find str sep = -1 then
+-        [str]
+-      else (
+-        let s1, s2 = split sep str in
+-        let max = if max = 0 then 0 else max - 1 in
+-        s1 :: nsplit ~max sep s2
+-      )
++      let len = String.length str in
++      let seplen = String.length sep in
++
++      let rec loop iters posn acc =
++        (* If we reached the limit, OR if the pattern does not match
++         * the string at all, return the rest of the string.
++         *)
++        if max > 0 && iters = max then (
++          let rest =
++            if posn = 0 then str else String.sub str posn (len-posn) in
++          List.rev (rest :: acc)
++        )
++        else (
++          let end_ = find_from str posn sep in
++          if end_ = -1 then (
++            let rest =
++              if posn = 0 then str else String.sub str posn (len-posn) in
++            List.rev (rest :: acc)
++          )
++          else (
++            let acc = String.sub str posn (end_-posn) :: acc in
++            loop (iters+1) (end_+seplen) acc
++          )
++        )
++      in
++      loop 1 0 []
+ 
+     let rec lines_split str =
+       let buf = Buffer.create 16 in
+diff --git a/common/mlstdutils/std_utils.mli b/common/mlstdutils/std_utils.mli
+index a39ac5f3b..7bd55fbae 100644
+--- a/common/mlstdutils/std_utils.mli
++++ b/common/mlstdutils/std_utils.mli
+@@ -82,6 +82,10 @@ module String : sig
+     val find : string -> string -> int
+     (** [find str sub] searches for [sub] as a substring of [str].  If
+         found it returns the index.  If not found, it returns [-1]. *)
++    val find_from : string -> int -> string -> int
++    (** [find_from str start sub] searches for [sub] as a substring of [str],
++        starting at index [start].  If found it returns the index.
++        If not found, it returns [-1]. *)
+     val replace : string -> string -> string -> string
+     (** [replace str s1 s2] replaces all instances of [s1] appearing in
+         [str] with [s2]. *)
+diff --git a/common/mlstdutils/std_utils_tests.ml b/common/mlstdutils/std_utils_tests.ml
+index 3f5bb1a86..4e368152f 100644
+--- a/common/mlstdutils/std_utils_tests.ml
++++ b/common/mlstdutils/std_utils_tests.ml
+@@ -113,13 +113,19 @@ let test_string_nsplit ctx =
+   assert_equal_stringlist [""] (String.nsplit " " "");
+   assert_equal_stringlist ["abc"] (String.nsplit " " "abc");
+   assert_equal_stringlist ["a"; "b"; "c"] (String.nsplit " " "a b c");
++  assert_equal_stringlist ["abc"; "d"; "e"] (String.nsplit " " "abc d e");
+   assert_equal_stringlist ["a"; "b"; "c"; ""] (String.nsplit " " "a b c ");
+   assert_equal_stringlist [""; "a"; "b"; "c"] (String.nsplit " " " a b c");
+   assert_equal_stringlist [""; "a"; "b"; "c"; ""] (String.nsplit " " " a b c ");
+   assert_equal_stringlist ["a b c d"] (String.nsplit ~max:1 " " "a b c d");
+   assert_equal_stringlist ["a"; "b c d"] (String.nsplit ~max:2 " " "a b c d");
+   assert_equal_stringlist ["a"; "b"; "c d"] (String.nsplit ~max:3 " " "a b c d");
+-  assert_equal_stringlist ["a"; "b"; "c"; "d"] (String.nsplit ~max:10 " " "a b c d")
++  assert_equal_stringlist ["a"; "b"; "c"; "d"] (String.nsplit ~max:10 " " "a b c d");
++
++  (* Test that nsplit can handle large strings. *)
++  let xs = Array.to_list (Array.make 10_000_000 "xyz") in
++  let xs_concat = String.concat " " xs in
++  assert_equal_stringlist xs (String.nsplit " " xs_concat)
+ 
+ (* Test Std_utils.String.lines_split. *)
+ let test_string_lines_split ctx =
+diff --git a/m4/guestfs-libraries.m4 b/m4/guestfs-libraries.m4
+index 80f9425f0..7c66853dd 100644
+--- a/m4/guestfs-libraries.m4
++++ b/m4/guestfs-libraries.m4
+@@ -19,9 +19,8 @@ dnl Any C libraries required by the libguestfs C library (not the daemon).
+ 
+ dnl Of course we need libguestfs.
+ dnl
+-dnl We need libguestfs 1.49.8 for guestfs_inspect_get_build_id in
+-dnl virt-drivers.
+-PKG_CHECK_MODULES([LIBGUESTFS], [libguestfs >= 1.49.8])
++dnl We need libguestfs >= 1:1.54.0-4.el9_6 for guestfs_sh_out.
++PKG_CHECK_MODULES([LIBGUESTFS], [libguestfs >= 1.54.0])
+ 
+ dnl Test if it's GNU or XSI strerror_r.
+ AC_FUNC_STRERROR_R

@@ -1,4 +1,4 @@
-From d326f1080aafe32d47b49064099f2e9d7759b2a0 Mon Sep 17 00:00:00 2001
+From 1cb20d561c6b2e93980ba9c7c7269b32f6d768eb Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Thu, 16 May 2024 12:49:24 +0100
 Subject: [PATCH] customize: Implement --inject-blnsvr operation
@@ -12,7 +12,7 @@ libguestfs, and the implementation of Inject_virtio_win.inject_blnsvr.
  customize/customize_run.ml | 13 +++++++++++--
  2 files changed, 12 insertions(+), 3 deletions(-)
 
-Submodule common 93a7f3af5..830cbdcf4:
+Submodule common 7cbb3ba35...a78839676:
 diff --git a/common/mlcustomize/customize-options.pod b/common/mlcustomize/customize-options.pod
 index ff93630d8..b2ac57526 100644
 --- a/common/mlcustomize/customize-options.pod
@@ -108,7 +108,7 @@ index 51a156eae..ee62961a1 100644
        (* --inject-qemu-ga METHOD *)
    | `InjectVirtioWin of string
 diff --git a/common/mlcustomize/inject_virtio_win.ml b/common/mlcustomize/inject_virtio_win.ml
-index 2a30b2008..4e0ed0e0e 100644
+index 0a4b8dac0..afec1e456 100644
 --- a/common/mlcustomize/inject_virtio_win.ml
 +++ b/common/mlcustomize/inject_virtio_win.ml
 @@ -24,6 +24,8 @@ open Common_gettext.Gettext
@@ -120,12 +120,19 @@ index 2a30b2008..4e0ed0e0e 100644
  type t = {
    g : Guestfs.guestfs; (** guestfs handle *)
  
-@@ -267,6 +269,18 @@ and inject_qemu_ga t =
-     configure_qemu_ga t msi_files;
+@@ -274,6 +276,25 @@ and inject_qemu_ga ({ g; root } as t) =
+     configure_qemu_ga t tempdir_win msi_files;
    msi_files <> [] (* return true if we found some qemu-ga MSI files *)
  
-+and inject_blnsvr t =
-+  let files = copy_blnsvr t in
++and inject_blnsvr ({ g; root } as t) =
++  (* Copy the files to the guest. *)
++  let dir, dir_win = Firstboot.firstboot_dir g root in
++  let dir_win = Option.value dir_win ~default:dir in
++  let tempdir = sprintf "%s/Temp" dir in
++  let tempdir_win = sprintf "%s\\Temp" dir_win in
++  g#mkdir_p tempdir;
++
++  let files = copy_blnsvr t tempdir in
 +  match files with
 +  | [] -> false (* Didn't find or install anything. *)
 +
@@ -133,25 +140,50 @@ index 2a30b2008..4e0ed0e0e 100644
 +   * drivers/by-driver).  Pick the first.
 +   *)
 +  | blnsvr :: _ ->
-+     configure_blnsvr t blnsvr;
++     configure_blnsvr t tempdir_win blnsvr;
 +     true
 +
  and add_guestor_to_registry t ((g, root) as reg) drv_name drv_pciid =
    let ddb_node = g#hivex_node_get_child root "DriverDatabase" in
  
-@@ -351,6 +365,11 @@ and copy_qemu_ga t =
+@@ -358,6 +379,11 @@ and copy_qemu_ga t tempdir =
      (fun () ->
        error (f_"root directory ‘/’ is missing from the virtio-win directory or ISO.\n\nThis should not happen and may indicate that virtio-win or virt-v2v is broken in some way.  Please report this as a bug with a full debug log."))
  
-+and copy_blnsvr t =
-+  copy_from_virtio_win t "/" "/" (virtio_iso_path_matches_blnsvr t)
++and copy_blnsvr t tempdir =
++  copy_from_virtio_win t "/" tempdir (virtio_iso_path_matches_blnsvr t)
 +    (fun () ->
 +      error (f_"root directory ‘/’ is missing from the virtio-win directory or ISO.\n\nThis should not happen and may indicate that virtio-win or virt-v2v is broken in some way.  Please report this as a bug with a full debug log."))
 +
  (* Copy all files from virtio_win directory/ISO located in [srcdir]
   * subdirectory and all its subdirectories to the [destdir]. The directory
   * hierarchy is not preserved, meaning all files will be directly in [destdir].
-@@ -513,6 +532,10 @@ and virtio_iso_path_matches_qemu_ga t path =
+@@ -452,10 +478,7 @@ and virtio_iso_path_matches_guest_os t path =
+      * "./drivers/amd64/Win2012R2/netkvm.sys".
+      * Note we check lowercase paths.
+      *)
+-    let pathelem elem =
+-      String.find lc_path ("/" ^ elem ^ "/") >= 0 ||
+-      String.is_prefix lc_path (elem ^ "/")
+-    in
++    let pathelem elem = String.find lc_path ("/" ^ elem ^ "/") >= 0 in
+     let p_arch =
+       if pathelem "x86" || pathelem "i386" then "i386"
+       else if pathelem "amd64" then "x86_64"
+@@ -499,11 +522,7 @@ and virtio_iso_path_matches_guest_os t path =
+       else
+         raise Not_found in
+ 
+-    let p_sriov = pathelem "sriov" in
+-
+-    arch = p_arch &&
+-    not p_sriov && (* always ignored, see RHEL-56383 *)
+-    os_major = p_os_major && os_minor = p_os_minor &&
++    arch = p_arch && os_major = p_os_major && os_minor = p_os_minor &&
+     match_os_variant os_variant &&
+     match_osinfo osinfo
+ 
+@@ -527,6 +546,10 @@ and virtio_iso_path_matches_qemu_ga t path =
    | ("x86_64", "rhev-qga64.msi") -> true
    | _ -> false
  
@@ -162,17 +194,17 @@ index 2a30b2008..4e0ed0e0e 100644
  (* Look up in libosinfo for the OS, and copy all the locally
   * available files specified as drivers for that OS to the [destdir].
   *
-@@ -586,3 +609,10 @@ and configure_qemu_ga t files =
-       Firstboot.add_firstboot_powershell t.g t.root
-         (sprintf "install-%s.ps1" msi_path) !psh_script;
-   ) files
+@@ -591,3 +614,10 @@ and configure_qemu_ga t tempdir_win files =
+   ) files;
+ 
+   Firstboot.add_firstboot_powershell t.g t.root "install-qemu-ga" !script
 +
-+and configure_blnsvr t blnsvr =
++and configure_blnsvr t tempdir_win blnsvr =
 +  let cmd = sprintf "\
 +                     @echo off\n\
 +                     echo Installing %s\n\
-+                     c:\\%s -i\n" blnsvr blnsvr in
-+  Firstboot.add_firstboot_script t.g t.root (sprintf "install-%s" blnsvr) cmd
++                     \"%s\\%s\" -i\n" blnsvr tempdir_win blnsvr in
++  Firstboot.add_firstboot_script t.g t.root "install-blnsvr" cmd
 diff --git a/common/mlcustomize/inject_virtio_win.mli b/common/mlcustomize/inject_virtio_win.mli
 index d14f04973..d273c4dd3 100644
 --- a/common/mlcustomize/inject_virtio_win.mli
