@@ -19,7 +19,7 @@
 Summary:       Tools to access and modify virtual machine disk images
 Name:          guestfs-tools
 Version:       1.52.2
-Release:       3%{?dist}
+Release:       4%{?dist}
 License:       GPL-2.0-or-later AND LGPL-2.0-or-later
 
 # Build only for architectures that have a kernel
@@ -56,6 +56,7 @@ Patch0005:     0005-builder-Replace-jansson-with-json-c.patch
 Patch0006:     0006-build-Remove-Jansson-dependency.patch
 Patch0007:     0007-test-data-phony-fedora-Add-simple-static-bin-sh.patch
 Patch0008:     0008-drivers-Handle-large-output-from-rpm-ql-command.patch
+Patch0009:     0009-Update-common-submodule.patch
 
 %if 0%{patches_touch_autotools}
 BuildRequires: autoconf, automake, libtool, gettext-devel
@@ -413,6 +414,10 @@ end
 
 
 %changelog
+* Fri Aug 15 2025 Richard W.M. Jones <rjones@redhat.com> - 1.52.2-4
+- Update guestfs-tools firstboot.bat to match virt-v2v
+  resolves: RHEL-109544
+
 * Tue Feb 25 2025 Richard W.M. Jones <rjones@redhat.com> - 1.52.2-3
 - Fix virt-drivers fails on opensuse guest if kernel-source is installed
   resolves: RHEL-80214
