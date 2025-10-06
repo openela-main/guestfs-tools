@@ -1,0 +1,267 @@
+From 2c090e270c1acea49949914c8995c94932e70e12 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 22 Oct 2024 11:07:01 +0100
+Subject: [PATCH] builder: Replace jansson with json-c
+
+This pulls in the following common module commit which ports the
+JSON_parser module from jansson to json-c:
+
+  Richard W.M. Jones (1):
+      mltools: Replace jansson with json-c
+
+(cherry picked from commit 12997768d231b80dc219a518c287ecf10c83ff0e)
+---
+ builder/Makefile.am | 2 +-
+ common              | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/builder/Makefile.am b/builder/Makefile.am
+index b474f0c9d..0761eff4c 100644
+--- a/builder/Makefile.am
++++ b/builder/Makefile.am
+@@ -206,7 +206,7 @@ OCAMLCLIBS = \
+ 	$(LIBLZMA_LIBS) \
+ 	$(LIBXML2_LIBS) \
+ 	$(LIBOSINFO_LIBS) \
+-	$(JANSSON_LIBS) \
++	$(JSON_C_LIBS) \
+ 	$(LIBINTL) \
+ 	-lgnu
+ 
+Submodule common a78839676..766384a45:
+diff --git a/common/mltools/JSON_parser-c.c b/common/mltools/JSON_parser-c.c
+index bf38dd1bf..fb67b4632 100644
+--- a/common/mltools/JSON_parser-c.c
++++ b/common/mltools/JSON_parser-c.c
+@@ -23,7 +23,7 @@
+ #include <caml/memory.h>
+ #include <caml/mlvalues.h>
+ 
+-#include <jansson.h>
++#include <json.h>
+ 
+ #include <stdio.h>
+ #include <string.h>
+@@ -40,7 +40,7 @@ value virt_builder_json_parser_tree_parse (value stringv);
+ value virt_builder_json_parser_tree_parse_file (value stringv);
+ 
+ static value
+-convert_json_t (json_t *val, int level)
++convert_json_t (json_object *val, int level)
+ {
+   CAMLparam0 ();
+   CAMLlocal5 (rv, v, tv, sv, consv);
+@@ -48,9 +48,11 @@ convert_json_t (json_t *val, int level)
+   if (level > 20)
+     caml_invalid_argument ("too many levels of object/array nesting");
+ 
+-  if (json_is_object (val)) {
++  switch (json_object_get_type (val)) {
++  case json_type_object: {
++    struct json_object_iterator it, itend;
+     const char *key;
+-    json_t *jvalue;
++    json_object *jvalue;
+ 
+     rv = caml_alloc (1, JSON_DICT_TAG);
+     v = Val_int (0);
+@@ -60,29 +62,39 @@ convert_json_t (json_t *val, int level)
+      * matter (eg. simplestreams which incorrectly uses a dict when it
+      * really should use an array).
+      */
+-    json_object_foreach (val, key, jvalue) {
++    it = json_object_iter_begin (val);
++    itend = json_object_iter_end (val);
++    while (!json_object_iter_equal (&it, &itend)) {
++      key = json_object_iter_peek_name (&it);
+       tv = caml_alloc_tuple (2);
+       sv = caml_copy_string (key);
+       Store_field (tv, 0, sv);
++
++      jvalue = json_object_iter_peek_value (&it);
+       sv = convert_json_t (jvalue, level + 1);
+       Store_field (tv, 1, sv);
++
+       consv = caml_alloc (2, 0);
+       Store_field (consv, 1, v);
+       Store_field (consv, 0, tv);
+       v = consv;
++
++      json_object_iter_next (&it);
+     }
+     Store_field (rv, 0, v);
++    break;
+   }
+-  else if (json_is_array (val)) {
+-    const size_t len = json_array_size (val);
++
++  case json_type_array: {
++    const size_t len = json_object_array_length (val);
+     size_t i;
+-    json_t *jvalue;
++    json_object *jvalue;
+ 
+     rv = caml_alloc (1, JSON_LIST_TAG);
+     v = Val_int (0);
+     for (i = 0; i < len; ++i) {
+       /* Note we have to create the OCaml list backwards. */
+-      jvalue = json_array_get (val, len-i-1);
++      jvalue = json_object_array_get_idx (val, len-i-1);
+       tv = convert_json_t (jvalue, level + 1);
+       consv = caml_alloc (2, 0);
+       Store_field (consv, 1, v);
+@@ -90,32 +102,36 @@ convert_json_t (json_t *val, int level)
+       v = consv;
+     }
+     Store_field (rv, 0, v);
++    break;
+   }
+-  else if (json_is_string (val)) {
++
++  case json_type_string:
+     rv = caml_alloc (1, JSON_STRING_TAG);
+-    v = caml_copy_string (json_string_value (val));
++    v = caml_copy_string (json_object_get_string (val));
+     Store_field (rv, 0, v);
+-  }
+-  else if (json_is_real (val)) {
++    break;
++
++  case json_type_double:
+     rv = caml_alloc (1, JSON_FLOAT_TAG);
+-    v = caml_copy_double (json_real_value (val));
++    v = caml_copy_double (json_object_get_double (val));
+     Store_field (rv, 0, v);
+-  }
+-  else if (json_is_integer (val)) {
++    break;
++
++  case json_type_int:
+     rv = caml_alloc (1, JSON_INT_TAG);
+-    v = caml_copy_int64 (json_integer_value (val));
++    v = caml_copy_int64 (json_object_get_int64 (val));
+     Store_field (rv, 0, v);
+-  }
+-  else if (json_is_true (val)) {
++    break;
++
++  case json_type_boolean:
+     rv = caml_alloc (1, JSON_BOOL_TAG);
+-    Store_field (rv, 0, Val_true);
+-  }
+-  else if (json_is_false (val)) {
+-    rv = caml_alloc (1, JSON_BOOL_TAG);
+-    Store_field (rv, 0, Val_false);
+-  }
+-  else
++    Store_field (rv, 0, json_object_get_boolean (val) ? Val_true : Val_false);
++    break;
++
++  case json_type_null:
+     rv = JSON_NULL;
++    break;
++  }
+ 
+   CAMLreturn (rv);
+ }
+@@ -125,45 +141,28 @@ virt_builder_json_parser_tree_parse (value stringv)
+ {
+   CAMLparam1 (stringv);
+   CAMLlocal1 (rv);
+-  json_t *tree;
+-  json_error_t err;
++  json_object *tree = NULL;
++  json_tokener *tok = NULL;
++  enum json_tokener_error err;
+ 
+-  tree = json_loads (String_val (stringv), JSON_DECODE_ANY, &err);
+-  if (tree == NULL) {
+-    char buf[256 + JSON_ERROR_TEXT_LENGTH];
+-    if (strlen (err.text) > 0)
+-      snprintf (buf, sizeof buf, "JSON parse error: %s", err.text);
+-    else
+-      snprintf (buf, sizeof buf, "unknown JSON parse error");
++  tok = json_tokener_new ();
++  json_tokener_set_flags (tok,
++                          JSON_TOKENER_STRICT | JSON_TOKENER_VALIDATE_UTF8);
++  tree = json_tokener_parse_ex (tok,
++                                String_val (stringv),
++                                caml_string_length (stringv));
++  err = json_tokener_get_error (tok);
++  if (err != json_tokener_success) {
++    char buf[256];
++    snprintf (buf, sizeof buf, "JSON parse error: %s",
++              json_tokener_error_desc (err));
++    json_tokener_free (tok);
+     caml_invalid_argument (buf);
+   }
++  json_tokener_free (tok);
+ 
+   rv = convert_json_t (tree, 1);
+-  json_decref (tree);
+-
+-  CAMLreturn (rv);
+-}
+-
+-value
+-virt_builder_json_parser_tree_parse_file (value filev)
+-{
+-  CAMLparam1 (filev);
+-  CAMLlocal1 (rv);
+-  json_t *tree;
+-  json_error_t err;
+-
+-  tree = json_load_file (String_val (filev), JSON_DECODE_ANY, &err);
+-  if (tree == NULL) {
+-    char buf[1024 + JSON_ERROR_TEXT_LENGTH];
+-    if (strlen (err.text) > 0)
+-      snprintf (buf, sizeof buf, "%s: JSON parse error: %s", String_val (filev), err.text);
+-    else
+-      snprintf (buf, sizeof buf, "%s: unknown JSON parse error", String_val (filev));
+-    caml_invalid_argument (buf);
+-  }
+-
+-  rv = convert_json_t (tree, 1);
+-  json_decref (tree);
++  json_object_put (tree);
+ 
+   CAMLreturn (rv);
+ }
+diff --git a/common/mltools/JSON_parser.ml b/common/mltools/JSON_parser.ml
+index 933057277..8bc35abdc 100644
+--- a/common/mltools/JSON_parser.ml
++++ b/common/mltools/JSON_parser.ml
+@@ -21,7 +21,10 @@ open Tools_utils
+ open Common_gettext.Gettext
+ 
+ external json_parser_tree_parse : string -> JSON.json_t = "virt_builder_json_parser_tree_parse"
+-external json_parser_tree_parse_file : string -> JSON.json_t = "virt_builder_json_parser_tree_parse_file"
++
++let json_parser_tree_parse_file filename =
++  let content = read_whole_file filename in
++  json_parser_tree_parse content
+ 
+ let object_find_optional key = function
+   | JSON.Dict fields ->
+diff --git a/common/mltools/Makefile.am b/common/mltools/Makefile.am
+index f510a6747..684c26946 100644
+--- a/common/mltools/Makefile.am
++++ b/common/mltools/Makefile.am
+@@ -116,7 +116,7 @@ libmltools_a_CFLAGS = \
+ 	$(LIBVIRT_CFLAGS) \
+ 	$(LIBXML2_CFLAGS) \
+ 	$(LIBGUESTFS_CFLAGS) \
+-	$(JANSSON_CFLAGS) \
++	$(JSON_C_CFLAGS) \
+ 	$(LIBOSINFO_CFLAGS) \
+ 	-fPIC
+ 
+@@ -148,7 +148,7 @@ OCAMLCLIBS = \
+ 	$(LIBCRYPT_LIBS) \
+ 	$(LIBVIRT_LIBS) \
+ 	$(LIBXML2_LIBS) \
+-	$(JANSSON_LIBS) \
++	$(JSON_C_LIBS) \
+ 	$(LIBOSINFO_LIBS) \
+ 	$(LIBINTL) \
+ 	-lgnu
