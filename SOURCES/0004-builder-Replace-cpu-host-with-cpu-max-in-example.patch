@@ -1,0 +1,30 @@
+From 2e93abca5acaa69cd6fd08b70079e8f432539076 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Mon, 16 Jun 2025 21:47:41 +0100
+Subject: [PATCH] builder: Replace -cpu host with -cpu max in example
+
+When KVM isn't present, some versions of qemu may print:
+
+  qemu-system-x86_64: Could not access KVM kernel module: No such file or directory
+  qemu-system-x86_64: failed to initialize kvm: No such file or directory
+  qemu-system-x86_64: falling back to tcg
+  qemu-system-x86_64: CPU model 'host' requires KVM or HVF
+
+Use -cpu max instead which should work in both cases.
+---
+ builder/virt-builder.pod | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/builder/virt-builder.pod b/builder/virt-builder.pod
+index 05bef1e05..ff0ec250c 100644
+--- a/builder/virt-builder.pod
++++ b/builder/virt-builder.pod
+@@ -1043,7 +1043,7 @@ following could be used to boot the virtual machine:
+ 
+  qemu-system-x86_64 \
+    -machine accel=kvm:tcg \
+-   -cpu host \
++   -cpu max \
+    -m 2048 \
+    -drive file=disk.img,format=raw,if=virtio
+ 

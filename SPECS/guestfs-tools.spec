@@ -7,19 +7,16 @@
 # Verify tarball signature with GPGv2.
 %global verify_tarball_signature 1
 
-# If there are patches which touch autotools files, set this to 1.
-%global patches_touch_autotools 1
-
 # The source directory.
-%global source_directory 1.52-stable
+%global source_directory 1.54-stable
 
 # Filter perl provides.
 %{?perl_default_filter}
 
 Summary:       Tools to access and modify virtual machine disk images
 Name:          guestfs-tools
-Version:       1.52.2
-Release:       2%{?dist}
+Version:       1.54.0
+Release:       3%{?dist}
 License:       GPL-2.0-or-later AND LGPL-2.0-or-later
 
 # Build only for architectures that have a kernel
@@ -45,24 +42,24 @@ Source2:       libguestfs.keyring
 Source3:       copy-patches.sh
 
 # Patches are maintained in the following repository:
-# https://github.com/rwmjones/guestfs-tools/commits/rhel-10.0
+# https://github.com/rwmjones/guestfs-tools/commits/rhel-10.1
 
 # Patches.
-Patch0001:     0001-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
-Patch0002:     0002-RHEL-builder-Disable-opensuse-repository.patch
-Patch0003:     0003-customize-Implement-inject-blnsvr-operation.patch
-Patch0004:     0004-build-Add-new-dependency-on-json-c.patch
-Patch0005:     0005-builder-Replace-jansson-with-json-c.patch
-Patch0006:     0006-build-Remove-Jansson-dependency.patch
-
-%if 0%{patches_touch_autotools}
-BuildRequires: autoconf, automake, libtool, gettext-devel
-%endif
+Patch0001:     0001-docs-Move-release-note-about-GNU-gettext-to-build-se.patch
+Patch0002:     0002-builder-Build-fedora-42-template.patch
+Patch0003:     0003-builder-Update-link-to-templates-to-use-https.patch
+Patch0004:     0004-builder-Replace-cpu-host-with-cpu-max-in-example.patch
+Patch0005:     0005-customize-Fixes-for-selinux-relabelling-and-Windows-.patch
+Patch0006:     0006-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
+Patch0007:     0007-RHEL-builder-Disable-opensuse-repository.patch
+Patch0008:     0008-RHEL-10-m4-Depend-on-libguestfs-1.56.1-2.el10-for-gu.patch
 
 # Basic build requirements.
+BuildRequires: autoconf, automake, libtool, gettext-devel
 BuildRequires: gcc, gcc-c++
 BuildRequires: make
-BuildRequires: libguestfs-devel >= 1:1.49.8-1
+BuildRequires: glibc-utils
+BuildRequires: libguestfs-devel >= 1:1.56.1-2.el10
 BuildRequires: libguestfs-xfs
 BuildRequires: perl(Pod::Simple)
 BuildRequires: perl(Pod::Man)
@@ -80,12 +77,10 @@ BuildRequires: ncurses-devel
 %ifarch x86_64
 BuildRequires: glibc-static
 %endif
+BuildRequires: ocaml >= 4.08
 BuildRequires: ocaml-libguestfs-devel
 BuildRequires: ocaml-findlib-devel
 BuildRequires: ocaml-gettext-devel
-%if !0%{?rhel}
-BuildRequires: ocaml-ounit-devel
-%endif
 BuildRequires: flex
 BuildRequires: bison
 BuildRequires: xz-devel
@@ -113,7 +108,7 @@ BuildRequires: gnupg2
 # Ensure a minimum version of libguestfs is installed.  This contains
 # a workaround for openssl bug RHBZ#2133884 and the hang where we
 # called setenv between fork and exec.
-Requires:      libguestfs >= 1.49.6-1
+Requires:      libguestfs >= 1:1.56.1-2.el10
 
 # For virt-builder:
 Requires:      curl
@@ -258,13 +253,12 @@ for %{name}.
 %setup -q
 %autopatch -p1
 
-%if 0%{patches_touch_autotools}
-autoreconf -i
-%endif
-
-
 %build
-%{configure}
+autoreconf -fiv
+
+# Preserve timestamps when copying files. Otherwise, the time of the
+# build ends up in the header added by gzip when it compresses files.
+%{configure} INSTALL='/usr/bin/install -p'
 
 # Building index-parse.c by hand works around a race condition in the
 # autotools cruft, where two or more copies of yacc race with each
@@ -412,6 +406,18 @@ end
 
 
 %changelog
+* Wed Aug 13 2025 Richard W.M. Jones <rjones@redhat.com> - 1.54.0-3
+- Rebase to guestfs-tools 1.54.0
+  resolves: RHEL-81734
+- virt-builder, virt-v2v & other tools with -v and --install causes dnf5 error
+  resolves: RHEL-83201
+- virt-drivers fails on opensuse guest if kernel-source is installed
+  resolves: RHEL-92604
+- builder: Update link to templates to use https
+  resolves: RHEL-94873
+- Fix SELinux relabelling in Linux split-/usr
+  resolves: RHEL-109129
+
 * Wed Oct 30 2024 Richard W.M. Jones <rjones@redhat.com> - 1.52.2-2
 - Rebase to guestfs-tools 1.52.2
   resolves: RHEL-56812

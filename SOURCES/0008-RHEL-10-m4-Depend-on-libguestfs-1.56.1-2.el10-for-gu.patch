@@ -1,0 +1,25 @@
+From d7dde127ee7a669db3aad1ddb637abd0cdc075b4 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Wed, 13 Aug 2025 18:03:09 +0100
+Subject: [PATCH] RHEL 10: m4: Depend on libguestfs 1.56.1-2.el10 for
+ guestfs_setfiles
+
+---
+ m4/guestfs-libraries.m4 | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/m4/guestfs-libraries.m4 b/m4/guestfs-libraries.m4
+index 82e62d54f..86fdd0262 100644
+--- a/m4/guestfs-libraries.m4
++++ b/m4/guestfs-libraries.m4
+@@ -19,8 +19,8 @@ dnl Any C libraries required by the libguestfs C library (not the daemon).
+ 
+ dnl Of course we need libguestfs.
+ dnl
+-dnl We need libguestfs 1.57.1 for guestfs_setfiles.
+-PKG_CHECK_MODULES([LIBGUESTFS], [libguestfs >= 1.57.1])
++dnl We need libguestfs 1.56.1-2.el10 for guestfs_setfiles.
++PKG_CHECK_MODULES([LIBGUESTFS], [libguestfs >= 1.56.1])
+ printf "libguestfs version is "; $PKG_CONFIG --modversion libguestfs
+ 
+ dnl Test if it's GNU or XSI strerror_r.

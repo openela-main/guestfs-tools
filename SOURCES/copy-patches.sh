@@ -7,7 +7,7 @@ set -e
 #   ./copy-patches.sh
 
 project=guestfs-tools
-rhel_version=10.0
+rhel_version=10.1
 
 # Check we're in the right directory.
 if [ ! -f $project.spec ]; then
