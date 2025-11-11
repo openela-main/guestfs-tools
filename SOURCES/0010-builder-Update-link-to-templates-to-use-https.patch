@@ -1,0 +1,23 @@
+From a0fbbc98f5fb069bcbf15a5a8ec51e4c778a2bd5 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 3 Jun 2025 08:29:57 +0100
+Subject: [PATCH] builder: Update link to templates to use https
+
+Fixes: https://issues.redhat.com/browse/RHEL-94873
+Reported-by: Xiang Hua Chen
+(cherry picked from commit 5a2458f38d40e5c6f3eceb8e7de162724ff9e374)
+---
+ builder/libguestfs.conf.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/builder/libguestfs.conf.in b/builder/libguestfs.conf.in
+index 8d8feab75..08b6a6234 100644
+--- a/builder/libguestfs.conf.in
++++ b/builder/libguestfs.conf.in
+@@ -1,5 +1,5 @@
+ [libguestfs.org]
+-uri=http://builder.libguestfs.org/index.asc
++uri=https://builder.libguestfs.org/index.asc
+ gpgkey=file://@SYSCONFDIR@/virt-builder/repos.d/libguestfs.gpg
+ 
+ [archive.libguestfs.org]

@@ -1,0 +1,51 @@
+From 6fc2e63a599311eeff6f02588b9a8f7851141483 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Fri, 15 Aug 2025 16:58:08 +0100
+Subject: [PATCH] Update common submodule
+
+Pick up the commit below, to ensure that the firstboot.bat file we
+inject into Windows is the same as the one from virt-v2v.
+
+  commit b40e534fefb74af32bd496904e44ce9bca1a7b34
+  Author: Vadim Rozenfeld <vrozenfe@redhat.com>
+  Date:   Thu Jul 10 10:48:04 2025 +1000
+
+    Modify the firstboot script to check the scripts
+    execution return status
+
+    Related: https://issues.redhat.com/browse/RHEL-100682
+
+    Signed-off-by: Vadim Rozenfeld <vrozenfe@redhat.com>
+
+Fixes: https://issues.redhat.com/browse/RHEL-109521
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common 31d279a79..6a822ba7b:
+diff --git a/common/mlcustomize/firstboot.ml b/common/mlcustomize/firstboot.ml
+index 52e76401e..aa3ea98ad 100644
+--- a/common/mlcustomize/firstboot.ml
++++ b/common/mlcustomize/firstboot.ml
+@@ -305,13 +305,19 @@ if not exist \"%%scripts_done%%\" (
+ :: Pick the next script to run.
+ for %%%%f in (\"%%scripts%%\"\\*.bat) do (
+   echo running \"%%%%f\"
+-  move \"%%%%f\" \"%%scripts_done%%\"
+-  pushd \"%%scripts_done%%\"
++  pushd \"%%scripts%%\"
+   call \"%%%%~nf\"
+   set elvl=!errorlevel!
+   echo .... exit code !elvl!
+   popd
+ 
++  if !elvl! NEQ 249 (
++    echo Script succeeded, moving to scripts-done
++    move \"%%%%f\" \"%%scripts_done%%\"
++  ) else (
++    echo Script failed, will retry on next boot
++  )
++
+   :: Reboot the computer.  This is necessary to free any locked
+   :: files which may prevent later scripts from running.
+   shutdown /r /t 0 /y
