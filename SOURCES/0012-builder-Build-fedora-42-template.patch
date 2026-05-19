@@ -1,4 +1,4 @@
-From bbc262b2166f226937d4331ac80b631cab7c1129 Mon Sep 17 00:00:00 2001
+From abb56223e0a35c3e5d1158f32789c44c28bacf40 Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Sat, 24 May 2025 13:27:00 +0100
 Subject: [PATCH] builder: Build fedora-42 template

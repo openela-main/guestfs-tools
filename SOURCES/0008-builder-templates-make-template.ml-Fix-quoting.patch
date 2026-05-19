@@ -1,0 +1,26 @@
+From cde27ebd4775cfa9a23a53a48b47303557bcb537 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 2 Sep 2025 09:05:27 +0100
+Subject: [PATCH] builder/templates/make-template.ml: Fix quoting
+
+Fix mistake introduced by manual editing of the previous commit.
+
+Fixes: commit 624df48b3d14d2e5420d758a425bcae509cfe318
+(cherry picked from commit 7e63b2142682582ec87bdd8c0d98bb22fcc0dabf)
+---
+ builder/templates/make-template.ml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/builder/templates/make-template.ml b/builder/templates/make-template.ml
+index 515c3da8b..a69d3ad3f 100755
+--- a/builder/templates/make-template.ml
++++ b/builder/templates/make-template.ml
+@@ -1394,7 +1394,7 @@ and make_rhel_yum_conf major minor arch =
+                sprintf "%s/AppStream/source/tree" topurl)
+       | _ -> assert false in
+ 
+-    bpf "\
++    bpf {|
+ # Yum configuration pointing to Red Hat servers.
+ 
+ [rhel%d]

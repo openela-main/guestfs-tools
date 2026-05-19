@@ -1,0 +1,35 @@
+From 706d6dfd2a36d1b176f2a64d897b249eeec4d80f Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 5 Feb 2026 11:57:33 +0000
+Subject: [PATCH] Sort some entries in .gitignore into order
+
+(cherry picked from commit 9d7161da76160b2e5d1f3488b3f0a652554d2077)
+---
+ .gitignore | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/.gitignore b/.gitignore
+index 94f77ac74..023686435 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -81,9 +81,9 @@ Makefile.in
+ /cat/virt-ls
+ /cat/virt-tail
+ /config.cache
+-/config.log
+ /config.h
+ /config.h.in
++/config.log
+ /config.sh
+ /config.status
+ /configure
+@@ -112,8 +112,8 @@ Makefile.in
+ /ocaml-dep.sh
+ /ocaml-link.sh
+ /po-docs/*/*.pod
+-/podwrapper.pl
+ /po/*.gmo
++/podwrapper.pl
+ /resize/.depend
+ /resize/virt-resize
+ /run

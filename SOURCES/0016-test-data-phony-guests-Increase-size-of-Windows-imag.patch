@@ -1,0 +1,31 @@
+From 269302e1a500d3cba94194faa258f6b47fef88fb Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 4 Nov 2025 13:04:12 +0000
+Subject: [PATCH] test-data/phony-guests: Increase size of Windows image
+
+For testing I tried to upload a very large Windows registry to the
+phony Windows image.  However because of the 256M limit on the size of
+the second partition (and NTFS overhead?) this was not possible.
+
+There's no real penalty to increasing the size of this image since
+it's just virtual space, so increase the virtual size to 2G (256M/1.7G
+split).
+
+(cherry picked from commit a39ae0b898825970549876738bd465f6a110de7c)
+---
+ test-data/phony-guests/make-windows-img.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/test-data/phony-guests/make-windows-img.sh b/test-data/phony-guests/make-windows-img.sh
+index 0ec6b4851..e72013c3d 100755
+--- a/test-data/phony-guests/make-windows-img.sh
++++ b/test-data/phony-guests/make-windows-img.sh
+@@ -37,7 +37,7 @@ fi
+ 
+ # Create a disk image.
+ guestfish <<EOF
+-sparse windows.img-t 512M
++sparse windows.img-t 2G
+ run
+ 
+ # Format the disk.

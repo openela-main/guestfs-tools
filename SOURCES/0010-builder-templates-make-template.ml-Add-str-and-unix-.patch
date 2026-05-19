@@ -1,0 +1,43 @@
+From 7b2125b42535e6768d8f162d19463af4c4e8df1b Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 2 Sep 2025 09:07:34 +0100
+Subject: [PATCH] builder/templates/make-template.ml: Add +str and +unix for
+ OCaml 5
+
+Removes these warnings:
+
+File "_none_", line 1:
+Alert ocaml_deprecated_auto_include:
+OCaml's lib directory layout changed in 5.0. The str subdirectory has been
+automatically added to the search path, but you should add -I +str to the
+command-line to silence this alert (e.g. by adding str to the list of
+libraries in your dune file, or adding use_str to your _tags file for
+ocamlbuild, or using -package str for ocamlfind).
+
+File "_none_", line 1:
+Alert ocaml_deprecated_auto_include:
+OCaml's lib directory layout changed in 5.0. The unix subdirectory has been
+automatically added to the search path, but you should add -I +unix to the
+command-line to silence this alert (e.g. by adding unix to the list of
+libraries in your dune file, or adding use_unix to your _tags file for
+ocamlbuild, or using -package unix for ocamlfind).
+
+(cherry picked from commit 046309b31c22da5ac64feac12bcf4501377a8b3f)
+---
+ builder/templates/make-template.ml | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/builder/templates/make-template.ml b/builder/templates/make-template.ml
+index f8b41209e..2ce803e2b 100755
+--- a/builder/templates/make-template.ml
++++ b/builder/templates/make-template.ml
+@@ -24,7 +24,9 @@
+  * shell scripts located in libguestfs.git/builder/website.
+  *)
+ 
++#directory "+str";;
+ #load "str.cma";;
++#directory "+unix";;
+ #load "unix.cma";;
+ #directory "+guestfs";; (* use globally installed guestfs *)
+ #load "mlguestfs.cma";;

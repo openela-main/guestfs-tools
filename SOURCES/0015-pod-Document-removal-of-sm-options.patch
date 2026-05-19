@@ -1,0 +1,150 @@
+From de70086dbe2eb8a6ec023ebbd0c84489a8719ba1 Mon Sep 17 00:00:00 2001
+From: Cole Robinson <crobinso@redhat.com>
+Date: Tue, 14 Oct 2025 14:16:19 -0400
+Subject: [PATCH] pod: Document removal of --sm-* options
+
+Update podcheck.pl to allow for still documenting these
+in virt-builder.pod
+
+Signed-off-by: Cole Robinson <crobinso@redhat.com>
+(cherry picked from commit 7bad703d724cd976cc3b7760b09af353aab46ff0)
+---
+ builder/virt-builder.pod     | 73 +++++++++++++-----------------------
+ customize/virt-customize.pod |  8 ++++
+ podcheck.pl                  | 13 ++++++-
+ 3 files changed, 46 insertions(+), 48 deletions(-)
+
+diff --git a/builder/virt-builder.pod b/builder/virt-builder.pod
+index ff0ec250c..f043939ca 100644
+--- a/builder/virt-builder.pod
++++ b/builder/virt-builder.pod
+@@ -878,53 +878,6 @@ F<C:\Program Files\Guestfs\Firstboot\log.txt>.
+ 
+ =back
+ 
+-=head2 SUBSCRIPTION-MANAGER
+-
+-It is possible to automate the registration and attaching of the
+-system using C<subscription-manager>.  This is typical on
+-Red Hat Enterprise Linux guests.  There are few options which ease
+-this process, avoid executing commands manually and exposing
+-passwords on command line.
+-
+-I<--sm-register> starts the registration process, and requires
+-I<--sm-credentials> to be specified; the format of the C<SELECTOR>
+-of I<--sm-credentials> is one of the following formats:
+-
+-=over 4
+-
+-=item B<--sm-credentials> USER:file:FILENAME
+-
+-Read the password for the specified C<USER> from F<FILENAME>.
+-
+-=item B<--sm-credentials> USER:password:PASSWORD
+-
+-Use the literal string C<PASSWORD> for the specified C<USER>.
+-
+-=back
+-
+-I<--sm-attach> attaches the system to subscriptions; the format
+-of its C<SELECTOR> is one of the following:
+-
+-=over 4
+-
+-=item B<--sm-attach> auto
+-
+-C<subscription-manager> attaches to the best-fitting subscriptions
+-for the system.
+-
+-=item B<--sm-attach> file:FILENAME
+-
+-Read the pool ID from F<FILENAME>.
+-
+-=item B<--sm-attach> pool:POOL
+-
+-Use the literal string C<POOL> as pool ID.
+-
+-=back
+-
+-I<--sm-remove> removes all the subscriptions from the guest, while
+-I<--sm-unregister> completely unregister the system.
+-
+ =head2 INSTALLATION PROCESS
+ 
+ When you invoke virt-builder, installation proceeds as follows:
+@@ -1764,6 +1717,32 @@ them, which is normal and harmless.
+ 
+ =back
+ 
++=head2 DEPRECATED OPTIONS
++
++In version 1.56 the subscription-manager options were removed.
++
++=over 4
++
++=item B<--sm-credentials>
++
++=item B<--sm-register>
++
++Use --run='subscription-manager register --username=USER --password=PASS'
++
++=item B<--sm-unregister>
++
++Use --run='subscription-manager unregister'
++
++=item B<--sm-attach>
++
++Use --run='subscription-manager attach ...'
++
++=item B<--sm-remove>
++
++Use --run='subscription-manager remove --all'
++
++=back
++
+ =head1 MACHINE READABLE OUTPUT
+ 
+ The I<--machine-readable> option can be used to make the output more
+diff --git a/customize/virt-customize.pod b/customize/virt-customize.pod
+index fb3d65665..9fee64ebc 100644
+--- a/customize/virt-customize.pod
++++ b/customize/virt-customize.pod
+@@ -248,6 +248,14 @@ existing ones.
+ 
+ For further details, see L<virt-builder(1)/SELINUX>.
+ 
++=head1 DEPRECATED OPTIONS
++
++In version 1.56 the subscription-manager options were removed:
++B<--sm-credentials>, B<--sm-register>, B<--sm-unregister>,
++B<--sm-attach>, B<--sm-remove>
++
++For further details, see L<virt-builder(1)/DEPRECATED OPTIONS>.
++
+ =head1 EXIT STATUS
+ 
+ This program returns 0 on success, or 1 if there was an error.
+diff --git a/podcheck.pl b/podcheck.pl
+index 795fe0e9b..047bbf8da 100755
+--- a/podcheck.pl
++++ b/podcheck.pl
+@@ -203,7 +203,18 @@ my $pod_options_checked = 0;
+ 
+ my %pod_options = ();
+ $pod_options{$_} = 1 foreach ( $content =~ /^=item.*B<(-[-\w]+)(?:=.*)?>/gm );
+-foreach (sort keys %pod_options) {
++
++my %pod_option_exists = ();
++$pod_option_exists{$_} = 1 foreach keys %pod_options;
++
++# Removed from the tool but we still document them
++delete $pod_option_exists{"--sm-credentials"};
++delete $pod_option_exists{"--sm-register"};
++delete $pod_option_exists{"--sm-unregister"};
++delete $pod_option_exists{"--sm-remove"};
++delete $pod_option_exists{"--sm-attach"};
++
++foreach (sort keys %pod_option_exists) {
+     unless ($ignore{$_}) {
+         $pod_options_checked++;
+         unless (exists $tool_option_exists{$_}) {

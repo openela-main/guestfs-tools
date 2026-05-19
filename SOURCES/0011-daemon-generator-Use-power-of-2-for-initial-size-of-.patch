@@ -1,0 +1,76 @@
+From 68a3719888f36719cef8bcd7817ed634c4524012 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Fri, 12 Sep 2025 08:37:58 +0100
+Subject: [PATCH] daemon, generator: Use power of 2 for initial size of
+ Hashtbl.create
+
+Before 2011 it was recommended to use a prime number for the initial
+size.  In 2011 the OCaml hash table was reimplemented using a hash
+function based on Murmur 3.  Hashtbl.create now adjusts the initial
+size to the next power of 2 (minimum 16).  So replace obsolete
+'Hashtbl.create 13' with 'Hashtbl.create 16'.
+
+(cherry picked from commit 51f7dfa8612e8e273e3ef15eddd7a5714122cc57)
+---
+ builder/builder.ml      | 2 +-
+ builder/index_parser.ml | 4 ++--
+ resize/resize.ml        | 4 ++--
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/builder/builder.ml b/builder/builder.ml
+index bbe2808f5..2df2fa5c7 100644
+--- a/builder/builder.ml
++++ b/builder/builder.ml
+@@ -46,7 +46,7 @@ let remove_duplicates index =
+    * (name, arch) tuples, so it possible to ignore duplicates,
+    * and versions with a lower revision.
+    *)
+-  let nseen = Hashtbl.create 13 in
++  let nseen = Hashtbl.create 16 in
+   List.iter (
+     fun (name, { Index.arch; revision }) ->
+       let id = name, arch in
+diff --git a/builder/index_parser.ml b/builder/index_parser.ml
+index 3e19e489e..2cb89488f 100644
+--- a/builder/index_parser.ml
++++ b/builder/index_parser.ml
+@@ -55,7 +55,7 @@ let get_index ~downloader ~sigchecker ?(template = false)
+         in
+         n, (find_arch fields)
+     ) sections in
+-    let nseen = Hashtbl.create 13 in
++    let nseen = Hashtbl.create 16 in
+     List.iter (
+       fun (n, arch) ->
+         let id = n, arch in
+@@ -71,7 +71,7 @@ let get_index ~downloader ~sigchecker ?(template = false)
+     (* Check for repeated fields. *)
+     List.iter (
+       fun (n, fields) ->
+-        let fseen = Hashtbl.create 13 in
++        let fseen = Hashtbl.create 16 in
+         List.iter (
+           fun (field, subkey, _) ->
+             let hashkey = (field, subkey) in
+diff --git a/resize/resize.ml b/resize/resize.ml
+index fffe2de77..707def8e9 100644
+--- a/resize/resize.ml
++++ b/resize/resize.ml
+@@ -630,7 +630,7 @@ read the man page virt-resize(1).
+    * that the user has asked to be ignored or deleted.
+    *)
+   let find_partition =
+-    let hash = Hashtbl.create 13 in
++    let hash = Hashtbl.create 16 in
+     List.iter (fun ({ p_name = name } as p) -> Hashtbl.add hash name p)
+       partitions;
+     fun ~option name ->
+@@ -881,7 +881,7 @@ read the man page virt-resize(1).
+     surplus in
+ 
+   (* Mark the --lv-expand LVs. *)
+-  let hash = Hashtbl.create 13 in
++  let hash = Hashtbl.create 16 in
+   List.iter (fun ({ lv_name = name } as lv) -> Hashtbl.add hash name lv) lvs;
+ 
+   List.iter (

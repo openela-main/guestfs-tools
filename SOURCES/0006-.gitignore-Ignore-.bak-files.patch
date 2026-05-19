@@ -1,0 +1,22 @@
+From 9ee5fdf8146231087a461f4cddc0280db762c2f4 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Mon, 1 Sep 2025 17:33:07 +0100
+Subject: [PATCH] .gitignore: Ignore *.bak files
+
+(cherry picked from commit cd5ea5cd63a11bc85077e6296021bd25b3c84662)
+---
+ .gitignore | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/.gitignore b/.gitignore
+index 9c2e200e6..94f77ac74 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -2,6 +2,7 @@
+ *.1
+ *.a
+ *.annot
++*.bak
+ *.cmi
+ *.cmo
+ *.cmx

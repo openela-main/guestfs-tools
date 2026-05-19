@@ -1,0 +1,1032 @@
+From fb38dacf4992404401e31535761bbf7f465a10b7 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 5 Feb 2026 11:56:40 +0000
+Subject: [PATCH] Move virt-filesystems, virt-log, virt-ls, virt-tail to new
+ directories
+
+For historical reasons these unrelated tools were all placed into the
+cat/ subdirectory (with virt-cat).  As this makes no sense, move them
+to their own directories.
+
+(cherry picked from commit 291cc520ffbe2b5986067b2ce754c3a532066d85)
+---
+ .gitignore                                    |  10 +-
+ Makefile.am                                   |   3 +-
+ cat/Makefile.am                               | 205 +-----------------
+ cat/test-docs.sh                              |   9 -
+ configure.ac                                  |   4 +
+ filesystems/Makefile.am                       |  88 ++++++++
+ {cat => filesystems}/filesystems.c            |   0
+ filesystems/test-docs.sh                      |  26 +++
+ {cat => filesystems}/test-virt-filesystems.sh |   0
+ {cat => filesystems}/virt-filesystems.pod     |   0
+ log/Makefile.am                               |  83 +++++++
+ {cat => log}/log.c                            |   0
+ log/test-docs.sh                              |  26 +++
+ {cat => log}/test-virt-log.sh                 |   0
+ {cat => log}/virt-log.pod                     |   0
+ ls/Makefile.am                                |  85 ++++++++
+ {cat => ls}/ls.c                              |   0
+ ls/test-docs.sh                               |  27 +++
+ {cat => ls}/test-virt-ls.sh                   |   0
+ {cat => ls}/virt-ls.pod                       |   0
+ po-docs/podfiles                              |   8 +-
+ po/POTFILES                                   |   8 +-
+ run.in                                        |   4 +
+ tail/Makefile.am                              |  84 +++++++
+ {cat => tail}/tail.c                          |   0
+ tail/test-docs.sh                             |  26 +++
+ {cat => tail}/test-virt-tail.sh               |   0
+ {cat => tail}/virt-tail.pod                   |   0
+ 28 files changed, 476 insertions(+), 220 deletions(-)
+ create mode 100644 filesystems/Makefile.am
+ rename {cat => filesystems}/filesystems.c (100%)
+ create mode 100755 filesystems/test-docs.sh
+ rename {cat => filesystems}/test-virt-filesystems.sh (100%)
+ rename {cat => filesystems}/virt-filesystems.pod (100%)
+ create mode 100644 log/Makefile.am
+ rename {cat => log}/log.c (100%)
+ create mode 100755 log/test-docs.sh
+ rename {cat => log}/test-virt-log.sh (100%)
+ rename {cat => log}/virt-log.pod (100%)
+ create mode 100644 ls/Makefile.am
+ rename {cat => ls}/ls.c (100%)
+ create mode 100755 ls/test-docs.sh
+ rename {cat => ls}/test-virt-ls.sh (100%)
+ rename {cat => ls}/virt-ls.pod (100%)
+ create mode 100644 tail/Makefile.am
+ rename {cat => tail}/tail.c (100%)
+ create mode 100755 tail/test-docs.sh
+ rename {cat => tail}/test-virt-tail.sh (100%)
+ rename {cat => tail}/virt-tail.pod (100%)
+
+diff --git a/.gitignore b/.gitignore
+index 023686435..ed850a20f 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -76,10 +76,6 @@ Makefile.in
+ /builder/virt-index-validate
+ /builder/*.xz
+ /cat/virt-cat
+-/cat/virt-filesystems
+-/cat/virt-log
+-/cat/virt-ls
+-/cat/virt-tail
+ /config.cache
+ /config.h
+ /config.h.in
+@@ -92,17 +88,20 @@ Makefile.in
+ /customize/test-settings-*.sh
+ /customize/virt-customize
+ /df/virt-df
++/diff/virt-diff
+ /drivers/.depend
+ /drivers/hwdata_config.ml
+ /drivers/virt-drivers
+-/diff/virt-diff
+ /edit/virt-edit
++/filesystems/virt-filesystems
+ /format/virt-format
+ /get-kernel/.depend
+ /get-kernel/virt-get-kernel
+ /inspector/actual-*.xml
+ /inspector/virt-inspector
+ /libtool
++/log/virt-log
++/ls/virt-ls
+ /m4/libtool.m4
+ /m4/ltoptions.m4
+ /m4/ltsugar.m4
+@@ -128,6 +127,7 @@ Makefile.in
+ /sysprep/sysprep-operations.pod
+ /sysprep/sysprep_operation_*.mli
+ /sysprep/virt-sysprep
++/tail/virt-tail
+ /test-data/blank-disks/blank-disk-*
+ /test-data/fake-virtio-win/fake-virtio-win.iso
+ /test-data/phony-guests/archlinux.img
+diff --git a/Makefile.am b/Makefile.am
+index b831ce7fe..7be3c1496 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -51,7 +51,8 @@ SUBDIRS += test-data
+ SUBDIRS += tests
+ 
+ # virt-tools in C.
+-SUBDIRS += align cat diff df edit format inspector make-fs
++SUBDIRS += align cat diff df edit filesystems format inspector
++SUBDIRS += log ls make-fs tail
+ 
+ if HAVE_OCAML
+ # OCaml tools.  Note 'common/ml*' and 'customize' contain shared code
+diff --git a/cat/Makefile.am b/cat/Makefile.am
+index 5569da185..483bf0913 100644
+--- a/cat/Makefile.am
++++ b/cat/Makefile.am
+@@ -1,5 +1,5 @@
+-# libguestfs virt-cat, virt-filesystems, virt-log, virt-ls and virt-tail.
+-# Copyright (C) 2010-2025 Red Hat Inc.
++# libguestfs virt-cat
++# Copyright (C) 2010-2026 Red Hat Inc.
+ #
+ # This program is free software; you can redistribute it and/or modify
+ # it under the terms of the GNU General Public License as published by
+@@ -21,19 +21,11 @@ EXTRA_DIST = \
+ 	test-docs.sh \
+ 	test-virt-cat.sh \
+ 	virt-cat.pod \
+-	test-virt-filesystems.sh \
+-	virt-filesystems.pod \
+-	test-virt-log.sh \
+-	virt-log.pod \
+-	test-virt-ls.sh \
+-	virt-ls.pod \
+-	test-virt-tail.sh \
+-	virt-tail.pod
++	$(NULL)
+ 
+-bin_PROGRAMS = virt-cat virt-filesystems virt-log virt-ls virt-tail
++bin_PROGRAMS = virt-cat
+ 
+-virt_cat_SOURCES = \
+-	cat.c
++virt_cat_SOURCES = cat.c
+ 
+ virt_cat_CPPFLAGS = \
+ 	-DGUESTFS_NO_DEPRECATED=1 \
+@@ -62,135 +54,10 @@ virt_cat_LDADD = \
+ 	$(LTLIBINTL) \
+ 	../gnulib/lib/libgnu.la
+ 
+-virt_filesystems_SOURCES = \
+-	filesystems.c
+-
+-virt_filesystems_CPPFLAGS = \
+-	-DGUESTFS_NO_DEPRECATED=1 \
+-	-DLOCALEBASEDIR=\""$(datadir)/locale"\" \
+-	-I$(top_srcdir)/common/utils -I$(top_builddir)/common/utils \
+-	-I$(top_srcdir)/common/structs -I$(top_builddir)/common/structs \
+-	-I$(top_srcdir)/lib -I$(top_builddir)/lib \
+-	-I$(top_srcdir)/include \
+-	-I$(top_srcdir)/common/options -I$(top_builddir)/common/options \
+-	-I$(top_srcdir)/common/windows -I$(top_builddir)/common/windows \
+-	-I$(srcdir)/../gnulib/lib -I../gnulib/lib
+-
+-virt_filesystems_CFLAGS = \
+-	$(WARN_CFLAGS) $(WERROR_CFLAGS) \
+-	$(LIBXML2_CFLAGS) \
+-	$(LIBGUESTFS_CFLAGS)
+-
+-virt_filesystems_LDADD = \
+-	$(top_builddir)/common/options/liboptions.la \
+-	$(top_builddir)/common/windows/libwindows.la \
+-	$(top_builddir)/common/structs/libstructs.la \
+-	$(top_builddir)/common/utils/libutils.la \
+-	$(LIBGUESTFS_LIBS) \
+-	$(LIBXML2_LIBS) \
+-	$(LIBVIRT_LIBS) \
+-	$(LTLIBINTL) \
+-	../gnulib/lib/libgnu.la
+-
+-virt_log_SOURCES = \
+-	log.c
+-
+-virt_log_CPPFLAGS = \
+-	-DGUESTFS_NO_DEPRECATED=1 \
+-	-DLOCALEBASEDIR=\""$(datadir)/locale"\" \
+-	-I$(top_srcdir)/common/utils -I$(top_builddir)/common/utils \
+-	-I$(top_srcdir)/common/structs -I$(top_builddir)/common/structs \
+-	-I$(top_srcdir)/lib -I$(top_builddir)/lib \
+-	-I$(top_srcdir)/include \
+-	-I$(top_srcdir)/common/options -I$(top_builddir)/common/options \
+-	-I$(top_srcdir)/common/windows -I$(top_builddir)/common/windows \
+-	-I$(srcdir)/../gnulib/lib -I../gnulib/lib
+-
+-virt_log_CFLAGS = \
+-	$(WARN_CFLAGS) $(WERROR_CFLAGS) \
+-	$(LIBXML2_CFLAGS) \
+-	$(LIBGUESTFS_CFLAGS)
+-
+-virt_log_LDADD = \
+-	$(top_builddir)/common/options/liboptions.la \
+-	$(top_builddir)/common/structs/libstructs.la \
+-	$(top_builddir)/common/utils/libutils.la \
+-	$(LIBGUESTFS_LIBS) \
+-	$(LIBXML2_LIBS) \
+-	$(LIBVIRT_LIBS) \
+-	$(LTLIBINTL) \
+-	../gnulib/lib/libgnu.la
+-
+-virt_ls_SOURCES = \
+-	ls.c
+-
+-virt_ls_CPPFLAGS = \
+-	-DGUESTFS_NO_DEPRECATED=1 \
+-	-DLOCALEBASEDIR=\""$(datadir)/locale"\" \
+-	-I$(top_srcdir)/common/utils -I$(top_builddir)/common/utils \
+-	-I$(top_srcdir)/common/structs -I$(top_builddir)/common/structs \
+-	-I$(top_srcdir)/lib -I$(top_builddir)/lib \
+-	-I$(top_srcdir)/include \
+-	-I$(top_srcdir)/common/visit \
+-	-I$(top_srcdir)/common/options -I$(top_builddir)/common/options \
+-	-I$(top_srcdir)/common/windows -I$(top_builddir)/common/windows \
+-	-I$(srcdir)/../gnulib/lib -I../gnulib/lib
+-
+-virt_ls_CFLAGS = \
+-	$(WARN_CFLAGS) $(WERROR_CFLAGS) \
+-	$(LIBXML2_CFLAGS) \
+-	$(LIBGUESTFS_CFLAGS)
+-
+-virt_ls_LDADD = \
+-	$(top_builddir)/common/options/liboptions.la \
+-	$(top_builddir)/common/visit/libvisit.la \
+-	$(top_builddir)/common/structs/libstructs.la \
+-	$(top_builddir)/common/utils/libutils.la \
+-	$(LIBGUESTFS_LIBS) \
+-	$(LIBXML2_LIBS) \
+-	$(LIBVIRT_LIBS) \
+-	$(LTLIBINTL) \
+-	../gnulib/lib/libgnu.la
+-
+-virt_tail_SOURCES = \
+-	tail.c
+-
+-virt_tail_CPPFLAGS = \
+-	-DGUESTFS_NO_DEPRECATED=1 \
+-	-DLOCALEBASEDIR=\""$(datadir)/locale"\" \
+-	-I$(top_srcdir)/common/utils -I$(top_builddir)/common/utils \
+-	-I$(top_srcdir)/common/structs -I$(top_builddir)/common/structs \
+-	-I$(top_srcdir)/lib -I$(top_builddir)/lib \
+-	-I$(top_srcdir)/include \
+-	-I$(top_srcdir)/common/options -I$(top_builddir)/common/options \
+-	-I$(top_srcdir)/common/windows -I$(top_builddir)/common/windows \
+-	-I$(srcdir)/../gnulib/lib -I../gnulib/lib
+-
+-virt_tail_CFLAGS = \
+-	$(WARN_CFLAGS) $(WERROR_CFLAGS) \
+-	$(LIBXML2_CFLAGS) \
+-	$(LIBGUESTFS_CFLAGS)
+-
+-virt_tail_LDADD = \
+-	$(top_builddir)/common/options/liboptions.la \
+-	$(top_builddir)/common/windows/libwindows.la \
+-	$(top_builddir)/common/structs/libstructs.la \
+-	$(top_builddir)/common/utils/libutils.la \
+-	$(LIBGUESTFS_LIBS) \
+-	$(LIBXML2_LIBS) \
+-	$(LIBVIRT_LIBS) \
+-	$(LTLIBINTL) \
+-	../gnulib/lib/libgnu.la
+-
+ # Manual pages and HTML files for the website.
+-man_MANS = virt-cat.1 virt-filesystems.1 virt-log.1 virt-ls.1 virt-tail.1
++man_MANS = virt-cat.1
+ 
+-noinst_DATA = \
+-	$(top_builddir)/website/virt-cat.1.html \
+-	$(top_builddir)/website/virt-filesystems.1.html \
+-	$(top_builddir)/website/virt-log.1.html \
+-	$(top_builddir)/website/virt-ls.1.html \
+-	$(top_builddir)/website/virt-tail.1.html
++noinst_DATA = $(top_builddir)/website/virt-cat.1.html
+ 
+ virt-cat.1 $(top_builddir)/website/virt-cat.1.html: stamp-virt-cat.pod
+ 
+@@ -204,54 +71,6 @@ stamp-virt-cat.pod: virt-cat.pod
+ 	  $<
+ 	touch $@
+ 
+-virt-filesystems.1 $(top_builddir)/website/virt-filesystems.1.html: stamp-virt-filesystems.pod
+-
+-stamp-virt-filesystems.pod: virt-filesystems.pod
+-	$(PODWRAPPER) \
+-	  --man virt-filesystems.1 \
+-	  --html $(top_builddir)/website/virt-filesystems.1.html \
+-	  --path $(top_srcdir)/common/options \
+-	  --license GPLv2+ \
+-	  --warning safe \
+-	  $<
+-	touch $@
+-
+-virt-log.1 $(top_builddir)/website/virt-log.1.html: stamp-virt-log.pod
+-
+-stamp-virt-log.pod: virt-log.pod
+-	$(PODWRAPPER) \
+-	  --man virt-log.1 \
+-	  --html $(top_builddir)/website/virt-log.1.html \
+-	  --path $(top_srcdir)/common/options \
+-	  --license GPLv2+ \
+-	  --warning safe \
+-	  $<
+-	touch $@
+-
+-virt-ls.1 $(top_builddir)/website/virt-ls.1.html: stamp-virt-ls.pod
+-
+-stamp-virt-ls.pod: virt-ls.pod
+-	$(PODWRAPPER) \
+-	  --man virt-ls.1 \
+-	  --html $(top_builddir)/website/virt-ls.1.html \
+-	  --path $(top_srcdir)/common/options \
+-	  --license GPLv2+ \
+-	  --warning safe \
+-	  $<
+-	touch $@
+-
+-virt-tail.1 $(top_builddir)/website/virt-tail.1.html: stamp-virt-tail.pod
+-
+-stamp-virt-tail.pod: virt-tail.pod
+-	$(PODWRAPPER) \
+-	  --man virt-tail.1 \
+-	  --html $(top_builddir)/website/virt-tail.1.html \
+-	  --path $(top_srcdir)/common/options \
+-	  --license GPLv2+ \
+-	  --warning safe \
+-	  $<
+-	touch $@
+-
+ # Tests.
+ 
+ TESTS_ENVIRONMENT = $(top_builddir)/run --test
+@@ -259,15 +78,7 @@ TESTS_ENVIRONMENT = $(top_builddir)/run --test
+ TESTS = \
+ 	test-docs.sh \
+ 	test-virt-cat.sh \
+-	test-virt-filesystems.sh \
+-	test-virt-log.sh \
+-	test-virt-ls.sh \
+-	test-virt-tail.sh
++	$(NULL)
+ 
+ check-valgrind:
+ 	$(MAKE) VG="@VG@" check
+-
+-check-valgrind-local-guests:
+-	for g in $(GUESTS); do \
+-	  $(top_builddir)/run --test @VG@ virt-filesystems -c "$(libvirt_ro_uri)" -d "$$g" --all --long -h --uuid || exit $$?; \
+-	done
+diff --git a/cat/test-docs.sh b/cat/test-docs.sh
+index bca349b52..31a17f31a 100755
+--- a/cat/test-docs.sh
++++ b/cat/test-docs.sh
+@@ -24,12 +24,3 @@ skip_if_skipped
+ 
+ $top_srcdir/podcheck.pl "$srcdir/virt-cat.pod" virt-cat \
+                         --path $top_srcdir/common/options
+-$top_srcdir/podcheck.pl "$srcdir/virt-filesystems.pod" virt-filesystems \
+-                        --path $top_srcdir/common/options
+-$top_srcdir/podcheck.pl "$srcdir/virt-log.pod" virt-log \
+-                        --path $top_srcdir/common/options
+-$top_srcdir/podcheck.pl "$srcdir/virt-ls.pod" virt-ls \
+-                        --path $top_srcdir/common/options \
+-                        --ignore=--checksums,--extra-stat,--time,--uid
+-$top_srcdir/podcheck.pl "$srcdir/virt-tail.pod" virt-tail \
+-                        --path $top_srcdir/common/options
+diff --git a/configure.ac b/configure.ac
+index 015c16823..998be7b9f 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -157,10 +157,13 @@ AC_CONFIG_FILES([Makefile
+                  drivers/Makefile
+                  drivers/hwdata_config.ml
+                  edit/Makefile
++                 filesystems/Makefile
+                  format/Makefile
+                  get-kernel/Makefile
+                  gnulib/lib/Makefile
+                  inspector/Makefile
++                 log/Makefile
++                 ls/Makefile
+                  make-fs/Makefile
+                  po-docs/Makefile
+                  po-docs/ja/Makefile
+@@ -169,6 +172,7 @@ AC_CONFIG_FILES([Makefile
+                  resize/Makefile
+                  sparsify/Makefile
+                  sysprep/Makefile
++                 tail/Makefile
+                  test-data/Makefile
+                  test-data/binaries/Makefile
+                  test-data/blank-disks/Makefile
+diff --git a/filesystems/Makefile.am b/filesystems/Makefile.am
+new file mode 100644
+index 000000000..17e3b9c6f
+--- /dev/null
++++ b/filesystems/Makefile.am
+@@ -0,0 +1,88 @@
++# libguestfs virt-filesystems
++# Copyright (C) 2010-2026 Red Hat Inc.
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++
++include $(top_srcdir)/subdir-rules.mk
++
++EXTRA_DIST = \
++	test-docs.sh \
++	test-virt-filesystems.sh \
++	virt-filesystems.pod \
++	$(NULL)
++
++bin_PROGRAMS = virt-filesystems
++
++virt_filesystems_SOURCES = filesystems.c
++
++virt_filesystems_CPPFLAGS = \
++	-DGUESTFS_NO_DEPRECATED=1 \
++	-DLOCALEBASEDIR=\""$(datadir)/locale"\" \
++	-I$(top_srcdir)/common/utils -I$(top_builddir)/common/utils \
++	-I$(top_srcdir)/common/structs -I$(top_builddir)/common/structs \
++	-I$(top_srcdir)/lib -I$(top_builddir)/lib \
++	-I$(top_srcdir)/include \
++	-I$(top_srcdir)/common/options -I$(top_builddir)/common/options \
++	-I$(top_srcdir)/common/windows -I$(top_builddir)/common/windows \
++	-I$(srcdir)/../gnulib/lib -I../gnulib/lib
++
++virt_filesystems_CFLAGS = \
++	$(WARN_CFLAGS) $(WERROR_CFLAGS) \
++	$(LIBXML2_CFLAGS) \
++	$(LIBGUESTFS_CFLAGS)
++
++virt_filesystems_LDADD = \
++	$(top_builddir)/common/options/liboptions.la \
++	$(top_builddir)/common/windows/libwindows.la \
++	$(top_builddir)/common/structs/libstructs.la \
++	$(top_builddir)/common/utils/libutils.la \
++	$(LIBGUESTFS_LIBS) \
++	$(LIBXML2_LIBS) \
++	$(LIBVIRT_LIBS) \
++	$(LTLIBINTL) \
++	../gnulib/lib/libgnu.la
++
++# Manual pages and HTML files for the website.
++man_MANS = virt-filesystems.1
++
++noinst_DATA = $(top_builddir)/website/virt-filesystems.1.html
++
++virt-filesystems.1 $(top_builddir)/website/virt-filesystems.1.html: stamp-virt-filesystems.pod
++
++stamp-virt-filesystems.pod: virt-filesystems.pod
++	$(PODWRAPPER) \
++	  --man virt-filesystems.1 \
++	  --html $(top_builddir)/website/virt-filesystems.1.html \
++	  --path $(top_srcdir)/common/options \
++	  --license GPLv2+ \
++	  --warning safe \
++	  $<
++	touch $@
++# Tests.
++
++TESTS_ENVIRONMENT = $(top_builddir)/run --test
++
++TESTS = \
++	test-docs.sh \
++	test-virt-filesystems.sh \
++	$(NULL)
++
++check-valgrind:
++	$(MAKE) VG="@VG@" check
++
++check-valgrind-local-guests:
++	for g in $(GUESTS); do \
++	  $(top_builddir)/run --test @VG@ virt-filesystems -c "$(libvirt_ro_uri)" -d "$$g" --all --long -h --uuid || exit $$?; \
++	done
+diff --git a/cat/filesystems.c b/filesystems/filesystems.c
+similarity index 100%
+rename from cat/filesystems.c
+rename to filesystems/filesystems.c
+diff --git a/filesystems/test-docs.sh b/filesystems/test-docs.sh
+new file mode 100755
+index 000000000..03c37dbb8
+--- /dev/null
++++ b/filesystems/test-docs.sh
+@@ -0,0 +1,26 @@
++#!/bin/bash -
++# libguestfs
++# Copyright (C) 2016 Red Hat Inc.
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++
++source ../tests/functions.sh
++set -e
++set -x
++
++skip_if_skipped
++
++$top_srcdir/podcheck.pl "$srcdir/virt-filesystems.pod" virt-filesystems \
++                        --path $top_srcdir/common/options
+diff --git a/cat/test-virt-filesystems.sh b/filesystems/test-virt-filesystems.sh
+similarity index 100%
+rename from cat/test-virt-filesystems.sh
+rename to filesystems/test-virt-filesystems.sh
+diff --git a/cat/virt-filesystems.pod b/filesystems/virt-filesystems.pod
+similarity index 100%
+rename from cat/virt-filesystems.pod
+rename to filesystems/virt-filesystems.pod
+diff --git a/log/Makefile.am b/log/Makefile.am
+new file mode 100644
+index 000000000..790dcbf98
+--- /dev/null
++++ b/log/Makefile.am
+@@ -0,0 +1,83 @@
++# libguestfs virt-log
++# Copyright (C) 2010-2026 Red Hat Inc.
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++
++include $(top_srcdir)/subdir-rules.mk
++
++EXTRA_DIST = \
++	test-docs.sh \
++	test-virt-log.sh \
++	virt-log.pod \
++	$(NULL)
++
++bin_PROGRAMS = virt-log
++
++virt_log_SOURCES = log.c
++
++virt_log_CPPFLAGS = \
++	-DGUESTFS_NO_DEPRECATED=1 \
++	-DLOCALEBASEDIR=\""$(datadir)/locale"\" \
++	-I$(top_srcdir)/common/utils -I$(top_builddir)/common/utils \
++	-I$(top_srcdir)/common/structs -I$(top_builddir)/common/structs \
++	-I$(top_srcdir)/lib -I$(top_builddir)/lib \
++	-I$(top_srcdir)/include \
++	-I$(top_srcdir)/common/options -I$(top_builddir)/common/options \
++	-I$(top_srcdir)/common/windows -I$(top_builddir)/common/windows \
++	-I$(srcdir)/../gnulib/lib -I../gnulib/lib
++
++virt_log_CFLAGS = \
++	$(WARN_CFLAGS) $(WERROR_CFLAGS) \
++	$(LIBXML2_CFLAGS) \
++	$(LIBGUESTFS_CFLAGS)
++
++virt_log_LDADD = \
++	$(top_builddir)/common/options/liboptions.la \
++	$(top_builddir)/common/structs/libstructs.la \
++	$(top_builddir)/common/utils/libutils.la \
++	$(LIBGUESTFS_LIBS) \
++	$(LIBXML2_LIBS) \
++	$(LIBVIRT_LIBS) \
++	$(LTLIBINTL) \
++	../gnulib/lib/libgnu.la
++
++# Manual pages and HTML files for the website.
++man_MANS = virt-log.1
++
++noinst_DATA = $(top_builddir)/website/virt-log.1.html
++
++virt-log.1 $(top_builddir)/website/virt-log.1.html: stamp-virt-log.pod
++
++stamp-virt-log.pod: virt-log.pod
++	$(PODWRAPPER) \
++	  --man virt-log.1 \
++	  --html $(top_builddir)/website/virt-log.1.html \
++	  --path $(top_srcdir)/common/options \
++	  --license GPLv2+ \
++	  --warning safe \
++	  $<
++	touch $@
++
++# Tests.
++
++TESTS_ENVIRONMENT = $(top_builddir)/run --test
++
++TESTS = \
++	test-docs.sh \
++	test-virt-log.sh \
++	$(NULL)
++
++check-valgrind:
++	$(MAKE) VG="@VG@" check
+diff --git a/cat/log.c b/log/log.c
+similarity index 100%
+rename from cat/log.c
+rename to log/log.c
+diff --git a/log/test-docs.sh b/log/test-docs.sh
+new file mode 100755
+index 000000000..fff8ccf30
+--- /dev/null
++++ b/log/test-docs.sh
+@@ -0,0 +1,26 @@
++#!/bin/bash -
++# libguestfs
++# Copyright (C) 2016 Red Hat Inc.
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++
++source ../tests/functions.sh
++set -e
++set -x
++
++skip_if_skipped
++
++$top_srcdir/podcheck.pl "$srcdir/virt-log.pod" virt-log \
++                        --path $top_srcdir/common/options
+diff --git a/cat/test-virt-log.sh b/log/test-virt-log.sh
+similarity index 100%
+rename from cat/test-virt-log.sh
+rename to log/test-virt-log.sh
+diff --git a/cat/virt-log.pod b/log/virt-log.pod
+similarity index 100%
+rename from cat/virt-log.pod
+rename to log/virt-log.pod
+diff --git a/ls/Makefile.am b/ls/Makefile.am
+new file mode 100644
+index 000000000..c4b64b912
+--- /dev/null
++++ b/ls/Makefile.am
+@@ -0,0 +1,85 @@
++# libguestfs virt-log
++# Copyright (C) 2010-2026 Red Hat Inc.
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++
++include $(top_srcdir)/subdir-rules.mk
++
++EXTRA_DIST = \
++	test-docs.sh \
++	test-virt-ls.sh \
++	virt-ls.pod \
++	$(NULL)
++
++bin_PROGRAMS = virt-ls
++
++virt_ls_SOURCES = ls.c
++
++virt_ls_CPPFLAGS = \
++	-DGUESTFS_NO_DEPRECATED=1 \
++	-DLOCALEBASEDIR=\""$(datadir)/locale"\" \
++	-I$(top_srcdir)/common/utils -I$(top_builddir)/common/utils \
++	-I$(top_srcdir)/common/structs -I$(top_builddir)/common/structs \
++	-I$(top_srcdir)/lib -I$(top_builddir)/lib \
++	-I$(top_srcdir)/include \
++	-I$(top_srcdir)/common/visit \
++	-I$(top_srcdir)/common/options -I$(top_builddir)/common/options \
++	-I$(top_srcdir)/common/windows -I$(top_builddir)/common/windows \
++	-I$(srcdir)/../gnulib/lib -I../gnulib/lib
++
++virt_ls_CFLAGS = \
++	$(WARN_CFLAGS) $(WERROR_CFLAGS) \
++	$(LIBXML2_CFLAGS) \
++	$(LIBGUESTFS_CFLAGS)
++
++virt_ls_LDADD = \
++	$(top_builddir)/common/options/liboptions.la \
++	$(top_builddir)/common/visit/libvisit.la \
++	$(top_builddir)/common/structs/libstructs.la \
++	$(top_builddir)/common/utils/libutils.la \
++	$(LIBGUESTFS_LIBS) \
++	$(LIBXML2_LIBS) \
++	$(LIBVIRT_LIBS) \
++	$(LTLIBINTL) \
++	../gnulib/lib/libgnu.la
++
++# Manual pages and HTML files for the website.
++man_MANS = virt-ls.1
++
++noinst_DATA = $(top_builddir)/website/virt-ls.1.html
++
++virt-ls.1 $(top_builddir)/website/virt-ls.1.html: stamp-virt-ls.pod
++
++stamp-virt-ls.pod: virt-ls.pod
++	$(PODWRAPPER) \
++	  --man virt-ls.1 \
++	  --html $(top_builddir)/website/virt-ls.1.html \
++	  --path $(top_srcdir)/common/options \
++	  --license GPLv2+ \
++	  --warning safe \
++	  $<
++	touch $@
++
++# Tests.
++
++TESTS_ENVIRONMENT = $(top_builddir)/run --test
++
++TESTS = \
++	test-docs.sh \
++	test-virt-ls.sh \
++	$(NULL)
++
++check-valgrind:
++	$(MAKE) VG="@VG@" check
+diff --git a/cat/ls.c b/ls/ls.c
+similarity index 100%
+rename from cat/ls.c
+rename to ls/ls.c
+diff --git a/ls/test-docs.sh b/ls/test-docs.sh
+new file mode 100755
+index 000000000..e5e398368
+--- /dev/null
++++ b/ls/test-docs.sh
+@@ -0,0 +1,27 @@
++#!/bin/bash -
++# libguestfs
++# Copyright (C) 2016 Red Hat Inc.
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++
++source ../tests/functions.sh
++set -e
++set -x
++
++skip_if_skipped
++
++$top_srcdir/podcheck.pl "$srcdir/virt-ls.pod" virt-ls \
++                        --path $top_srcdir/common/options \
++                        --ignore=--checksums,--extra-stat,--time,--uid
+diff --git a/cat/test-virt-ls.sh b/ls/test-virt-ls.sh
+similarity index 100%
+rename from cat/test-virt-ls.sh
+rename to ls/test-virt-ls.sh
+diff --git a/cat/virt-ls.pod b/ls/virt-ls.pod
+similarity index 100%
+rename from cat/virt-ls.pod
+rename to ls/virt-ls.pod
+diff --git a/po-docs/podfiles b/po-docs/podfiles
+index 69ad52768..7fb4162dc 100644
+--- a/po-docs/podfiles
++++ b/po-docs/podfiles
+@@ -3,10 +3,6 @@ builder/virt-builder-repository.pod
+ builder/virt-builder.pod
+ builder/virt-index-validate.pod
+ cat/virt-cat.pod
+-cat/virt-filesystems.pod
+-cat/virt-log.pod
+-cat/virt-ls.pod
+-cat/virt-tail.pod
+ common/mlcustomize/customize-options.pod
+ common/mlcustomize/customize-synopsis.pod
+ common/mlcustomize/v2v-customize-options.pod
+@@ -23,13 +19,17 @@ docs/guestfs-tools-release-notes-1.52.pod
+ docs/guestfs-tools-release-notes-1.54.pod
+ drivers/virt-drivers.pod
+ edit/virt-edit.pod
++filesystems/virt-filesystems.pod
+ format/virt-format.pod
+ get-kernel/virt-get-kernel.pod
+ inspector/virt-inspector.pod
++log/virt-log.pod
++ls/virt-ls.pod
+ make-fs/virt-make-fs.pod
+ resize/virt-resize.pod
+ sparsify/virt-sparsify.pod
+ sysprep/sysprep-extra-options.pod
+ sysprep/sysprep-operations.pod
+ sysprep/virt-sysprep.pod
++tail/virt-tail.pod
+ win-reg/virt-win-reg.in
+diff --git a/po/POTFILES b/po/POTFILES
+index 396729c30..c540c4e29 100644
+--- a/po/POTFILES
++++ b/po/POTFILES
+@@ -7,10 +7,6 @@ builder/index-validate.c
+ builder/pxzcat-c.c
+ builder/setlocale-c.c
+ cat/cat.c
+-cat/filesystems.c
+-cat/log.c
+-cat/ls.c
+-cat/tail.c
+ common/edit/file-edit.c
+ common/mlcustomize/crypt-c.c
+ common/mlcustomize/perl_edit-c.c
+@@ -53,6 +49,10 @@ df/main.c
+ df/output.c
+ diff/diff.c
+ edit/edit.c
++filesystems/filesystems.c
+ format/format.c
+ inspector/inspector.c
++log/log.c
++ls/ls.c
+ make-fs/make-fs.c
++tail/tail.c
+diff --git a/run.in b/run.in
+index 741434a5a..e52d66c97 100755
+--- a/run.in
++++ b/run.in
+@@ -78,14 +78,18 @@ prepend PATH "$b/diff"
+ prepend PATH "$b/drivers"
+ prepend PATH "$b/edit"
+ prepend PATH "$b/erlang"
++prepend PATH "$b/filesystems"
+ prepend PATH "$b/format"
+ prepend PATH "$b/fuse"
+ prepend PATH "$b/get-kernel"
+ prepend PATH "$b/inspector"
++prepend PATH "$b/log"
++prepend PATH "$b/ls"
+ prepend PATH "$b/make-fs"
+ prepend PATH "$b/resize"
+ prepend PATH "$b/sparsify"
+ prepend PATH "$b/sysprep"
++prepend PATH "$b/tail"
+ prepend PATH "$b/win-reg"
+ export PATH
+ 
+diff --git a/tail/Makefile.am b/tail/Makefile.am
+new file mode 100644
+index 000000000..ac822b841
+--- /dev/null
++++ b/tail/Makefile.am
+@@ -0,0 +1,84 @@
++# libguestfs virt-tail.
++# Copyright (C) 2010-2026 Red Hat Inc.
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++
++include $(top_srcdir)/subdir-rules.mk
++
++EXTRA_DIST = \
++	test-docs.sh \
++	test-virt-tail.sh \
++	virt-tail.pod \
++	$(NULL)
++
++bin_PROGRAMS = virt-tail
++
++virt_tail_SOURCES = tail.c
++
++virt_tail_CPPFLAGS = \
++	-DGUESTFS_NO_DEPRECATED=1 \
++	-DLOCALEBASEDIR=\""$(datadir)/locale"\" \
++	-I$(top_srcdir)/common/utils -I$(top_builddir)/common/utils \
++	-I$(top_srcdir)/common/structs -I$(top_builddir)/common/structs \
++	-I$(top_srcdir)/lib -I$(top_builddir)/lib \
++	-I$(top_srcdir)/include \
++	-I$(top_srcdir)/common/options -I$(top_builddir)/common/options \
++	-I$(top_srcdir)/common/windows -I$(top_builddir)/common/windows \
++	-I$(srcdir)/../gnulib/lib -I../gnulib/lib
++
++virt_tail_CFLAGS = \
++	$(WARN_CFLAGS) $(WERROR_CFLAGS) \
++	$(LIBXML2_CFLAGS) \
++	$(LIBGUESTFS_CFLAGS)
++
++virt_tail_LDADD = \
++	$(top_builddir)/common/options/liboptions.la \
++	$(top_builddir)/common/windows/libwindows.la \
++	$(top_builddir)/common/structs/libstructs.la \
++	$(top_builddir)/common/utils/libutils.la \
++	$(LIBGUESTFS_LIBS) \
++	$(LIBXML2_LIBS) \
++	$(LIBVIRT_LIBS) \
++	$(LTLIBINTL) \
++	../gnulib/lib/libgnu.la
++
++# Manual pages and HTML files for the website.
++man_MANS = virt-tail.1
++
++noinst_DATA = $(top_builddir)/website/virt-tail.1.html
++
++virt-tail.1 $(top_builddir)/website/virt-tail.1.html: stamp-virt-tail.pod
++
++stamp-virt-tail.pod: virt-tail.pod
++	$(PODWRAPPER) \
++	  --man virt-tail.1 \
++	  --html $(top_builddir)/website/virt-tail.1.html \
++	  --path $(top_srcdir)/common/options \
++	  --license GPLv2+ \
++	  --warning safe \
++	  $<
++	touch $@
++
++# Tests.
++
++TESTS_ENVIRONMENT = $(top_builddir)/run --test
++
++TESTS = \
++	test-docs.sh \
++	test-virt-tail.sh \
++	$(NULL)
++
++check-valgrind:
++	$(MAKE) VG="@VG@" check
+diff --git a/cat/tail.c b/tail/tail.c
+similarity index 100%
+rename from cat/tail.c
+rename to tail/tail.c
+diff --git a/tail/test-docs.sh b/tail/test-docs.sh
+new file mode 100755
+index 000000000..ffa114be6
+--- /dev/null
++++ b/tail/test-docs.sh
+@@ -0,0 +1,26 @@
++#!/bin/bash -
++# libguestfs
++# Copyright (C) 2016 Red Hat Inc.
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++
++source ../tests/functions.sh
++set -e
++set -x
++
++skip_if_skipped
++
++$top_srcdir/podcheck.pl "$srcdir/virt-tail.pod" virt-tail \
++                        --path $top_srcdir/common/options
+diff --git a/cat/test-virt-tail.sh b/tail/test-virt-tail.sh
+similarity index 100%
+rename from cat/test-virt-tail.sh
+rename to tail/test-virt-tail.sh
+diff --git a/cat/virt-tail.pod b/tail/virt-tail.pod
+similarity index 100%
+rename from cat/virt-tail.pod
+rename to tail/virt-tail.pod

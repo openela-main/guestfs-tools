@@ -1,10 +1,11 @@
-From 5a2458f38d40e5c6f3eceb8e7de162724ff9e374 Mon Sep 17 00:00:00 2001
+From 2eae3778a32b18944a6a561e10a35eae74fa11f0 Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Tue, 3 Jun 2025 08:29:57 +0100
 Subject: [PATCH] builder: Update link to templates to use https
 
 Fixes: https://issues.redhat.com/browse/RHEL-94873
 Reported-by: Xiang Hua Chen
+(cherry picked from commit 5a2458f38d40e5c6f3eceb8e7de162724ff9e374)
 ---
  builder/libguestfs.conf.in | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)

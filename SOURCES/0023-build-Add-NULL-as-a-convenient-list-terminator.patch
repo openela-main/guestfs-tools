@@ -1,0 +1,35 @@
+From c9022d24dbfb5d715668fd810716753d096648f0 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Mon, 22 Sep 2025 10:58:29 +0100
+Subject: [PATCH] build: Add $(NULL) as a convenient list terminator
+
+When building lists of things in Makefiles it's convenient to have a
+list terminator to avoid hanging backslash problems.  eg:
+
+  EXTRA_DIST = \
+           thing1 \
+           thing2 \
+           $(NULL)
+
+Cherry picked from virt-v2v commit 09b86c07bf19beba9ccb8fcca0ebfae34dd56406
+
+(cherry picked from commit dad8c0d3803dcbc91e22ca35c630d9e8a01df81b)
+---
+ common-rules.mk | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/common-rules.mk b/common-rules.mk
+index 4df1e33f1..7a116c827 100644
+--- a/common-rules.mk
++++ b/common-rules.mk
+@@ -20,6 +20,10 @@
+ 
+ -include $(top_builddir)/localenv
+ 
++# Convenient way to terminate lists in Makefiles, so that we avoid
++# problems with dangling backslashes.
++NULL =
++
+ # Files that should universally be removed by 'make clean'.  Note if
+ # there is any case in any subdirectory where a file should not be
+ # removed by 'make clean', it should not be listed here!

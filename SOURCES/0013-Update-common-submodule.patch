@@ -1,0 +1,61 @@
+From 2d808c89eee6369df62b3afe16681a41ca42e0b9 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Sat, 20 Sep 2025 17:20:25 +0100
+Subject: [PATCH] Update common submodule
+
+Richard W.M. Jones (3):
+      mlstdutils: Export List.find_opt
+      daemon, generator: Use power of 2 for initial size of Hashtbl.create
+      mlcustomize/inject_virtio_win.ml: Use viostor.inf instead of guestor
+
+See-also: https://github.com/libguestfs/libguestfs-common/pull/17
+(cherry picked from commit 13bcff3c2ca3e7ad355527a13b3aa2941ec1ff5b)
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common 7ecf3992b..da55dc4d7:
+diff --git a/common/mlcustomize/customize_run.ml b/common/mlcustomize/customize_run.ml
+index ff719f4ec..64afd3ab5 100644
+--- a/common/mlcustomize/customize_run.ml
++++ b/common/mlcustomize/customize_run.ml
+@@ -97,7 +97,7 @@ let run (g : G.guestfs) root (ops : ops) =
+     ) in
+ 
+   (* Store the passwords and set them all at the end. *)
+-  let passwords = Hashtbl.create 13 in
++  let passwords = Hashtbl.create 16 in
+   let set_password user pw =
+     if Hashtbl.mem passwords user then
+       error (f_"multiple --root-password/--password options set the \
+diff --git a/common/mlcustomize/inject_virtio_win.ml b/common/mlcustomize/inject_virtio_win.ml
+index b26b14d34..114df0641 100644
+--- a/common/mlcustomize/inject_virtio_win.ml
++++ b/common/mlcustomize/inject_virtio_win.ml
+@@ -310,8 +310,13 @@ and ddb_regedits inspect drv_name drv_pciid =
+    * one must add keys into the DriverDatabase.
+    *)
+ 
++  let winarch =
++    match inspect.i_arch with
++    | "i386" -> "x86" | "x86_64" -> "amd64"
++    | _ -> assert false in
++
+   let drv_inf = "guestor.inf" in
+-  let drv_inf_label = drv_inf ^ "_tmp" in
++  let drv_inf_label = sprintf "%s_%s_0000000000000000" drv_inf winarch in
+   let drv_config = "guestor_conf" in
+ 
+   [
+diff --git a/common/mlstdutils/std_utils.mli b/common/mlstdutils/std_utils.mli
+index a20e720c2..6c1911da8 100644
+--- a/common/mlstdutils/std_utils.mli
++++ b/common/mlstdutils/std_utils.mli
+@@ -46,6 +46,7 @@ module List : sig
+     val mem : 'a -> 'a list -> bool
+     val memq : 'a -> 'a list -> bool
+     val find : ('a -> bool) -> 'a list -> 'a
++    val find_opt : ('a -> bool) -> 'a list -> 'a option
+     val filter : ('a -> bool) -> 'a list -> 'a list
+     val find_all : ('a -> bool) -> 'a list -> 'a list
+     val partition : ('a -> bool) -> 'a list -> 'a list * 'a list

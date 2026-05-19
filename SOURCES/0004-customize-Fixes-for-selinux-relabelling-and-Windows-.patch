@@ -1,4 +1,4 @@
-From ea0f9cf0743c3e50a996a9d7ec488d58a9312b11 Mon Sep 17 00:00:00 2001
+From 6a1e751d4b10ae1833ee18c0796306711e842e76 Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Wed, 13 Aug 2025 16:51:39 +0100
 Subject: [PATCH] customize: Fixes for selinux relabelling and Windows
@@ -23,6 +23,7 @@ new guestfs_setfiles API).
 
 Fixes: https://issues.redhat.com/browse/RHEL-108174
 Related: https://issues.redhat.com/browse/RHEL-100682
+(cherry picked from commit ea0f9cf0743c3e50a996a9d7ec488d58a9312b11)
 ---
  common                  | 2 +-
  m4/guestfs-libraries.m4 | 4 ++--

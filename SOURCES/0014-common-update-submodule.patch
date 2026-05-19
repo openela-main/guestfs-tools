@@ -1,0 +1,427 @@
+From 5ed99959b689fc6fa287d9c6100e92a18bc1c9be Mon Sep 17 00:00:00 2001
+From: Cole Robinson <crobinso@redhat.com>
+Date: Tue, 14 Oct 2025 14:07:40 -0400
+Subject: [PATCH] common: update submodule
+
+Cole Robinson (1):
+      mlcustomize: deprecate and remove --sm-* options
+
+Signed-off-by: Cole Robinson <crobinso@redhat.com>
+(cherry picked from commit 57b225d8d324d15d79fab2ccc6944868c1168a42)
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common da55dc4d7..90399dd18:
+diff --git a/common/mlcustomize/Makefile.am b/common/mlcustomize/Makefile.am
+index 6e03bfea3..351524c80 100644
+--- a/common/mlcustomize/Makefile.am
++++ b/common/mlcustomize/Makefile.am
+@@ -47,7 +47,6 @@ SOURCES_MLI = \
+ 	random_seed.mli \
+ 	SELinux_relabel.mli \
+ 	ssh_key.mli \
+-	subscription_manager.mli \
+ 	timezone.mli
+ 
+ # This list must be in dependency order.
+@@ -58,7 +57,6 @@ SOURCES_ML = \
+ 	perl_edit.ml \
+ 	random_seed.ml \
+ 	ssh_key.ml \
+-	subscription_manager.ml \
+ 	timezone.ml \
+ 	crypt.ml \
+ 	password.ml \
+diff --git a/common/mlcustomize/customize-options.pod b/common/mlcustomize/customize-options.pod
+index 157145ebc..c8de3953c 100644
+--- a/common/mlcustomize/customize-options.pod
++++ b/common/mlcustomize/customize-options.pod
+@@ -392,35 +392,6 @@ It cannot delete directories, only regular files.
+ 
+ This is a compatibility option that does nothing.
+ 
+-=item B<--sm-attach> SELECTOR
+-
+-Attach to a pool using C<subscription-manager>.
+-
+-See L<virt-builder(1)/SUBSCRIPTION-MANAGER> for the format of
+-the C<SELECTOR> field.
+-
+-=item B<--sm-credentials> SELECTOR
+-
+-Set the credentials for C<subscription-manager>.
+-
+-See L<virt-builder(1)/SUBSCRIPTION-MANAGER> for the format of
+-the C<SELECTOR> field.
+-
+-=item B<--sm-register>
+-
+-Register the guest using C<subscription-manager>.
+-
+-This requires credentials being set using I<--sm-credentials>.
+-
+-=item B<--sm-remove>
+-
+-Remove all the subscriptions from the guest using
+-C<subscription-manager>.
+-
+-=item B<--sm-unregister>
+-
+-Unregister the guest using C<subscription-manager>.
+-
+ =item B<--ssh-inject> USER[:SELECTOR]
+ 
+ Inject an ssh key so the given C<USER> will be able to log in over
+diff --git a/common/mlcustomize/customize-synopsis.pod b/common/mlcustomize/customize-synopsis.pod
+index 957de8cf2..f5eeb69dd 100644
+--- a/common/mlcustomize/customize-synopsis.pod
++++ b/common/mlcustomize/customize-synopsis.pod
+@@ -8,11 +8,10 @@
+     [--install PKG,PKG..] [--link TARGET:LINK[:LINK..]] [--mkdir DIR]
+     [--move SOURCE:DEST] [--password USER:SELECTOR]
+     [--root-password SELECTOR] [--run SCRIPT]
+-    [--run-command 'CMD+ARGS'] [--scrub FILE] [--sm-attach SELECTOR]
+-    [--sm-register] [--sm-remove] [--sm-unregister]
++    [--run-command 'CMD+ARGS'] [--scrub FILE]
+     [--ssh-inject USER[:SELECTOR]] [--tar-in TARFILE:REMOTEDIR]
+     [--timezone TIMEZONE] [--touch FILE] [--truncate FILE]
+     [--truncate-recursive PATH] [--uninstall PKG,PKG..] [--update]
+     [--upload FILE:DEST] [--write FILE:CONTENT] [--no-logfile]
+     [--password-crypto md5|sha256|sha512] [--no-selinux-relabel]
+-    [--selinux-relabel] [--sm-credentials SELECTOR]
++    [--selinux-relabel]
+diff --git a/common/mlcustomize/customize_cmdline.ml b/common/mlcustomize/customize_cmdline.ml
+index 7451f1325..786f4ee49 100644
+--- a/common/mlcustomize/customize_cmdline.ml
++++ b/common/mlcustomize/customize_cmdline.ml
+@@ -85,14 +85,6 @@ and op = [
+       (* --run-command 'CMD+ARGS' *)
+   | `Scrub of string
+       (* --scrub FILE *)
+-  | `SMAttach of Subscription_manager.sm_pool
+-      (* --sm-attach SELECTOR *)
+-  | `SMRegister
+-      (* --sm-register *)
+-  | `SMRemove
+-      (* --sm-remove *)
+-  | `SMUnregister
+-      (* --sm-unregister *)
+   | `SSHInject of string * Ssh_key.ssh_key_selector
+       (* --ssh-inject USER[:SELECTOR] *)
+   | `TarIn of string * string
+@@ -123,8 +115,6 @@ and flags = {
+       (* --no-selinux-relabel *)
+   selinux_relabel_ignored : bool;
+       (* --selinux-relabel *)
+-  sm_credentials : Subscription_manager.sm_credentials option;
+-      (* --sm-credentials SELECTOR *)
+ }
+ 
+ type argspec = Getopt.keys * Getopt.spec * Getopt.doc
+@@ -135,7 +125,6 @@ let rec argspec ?(v2v = false) () =
+   let password_crypto = ref None in
+   let no_selinux_relabel = ref false in
+   let selinux_relabel_ignored = ref false in
+-  let sm_credentials = ref None in
+ 
+   let rec get_ops () = {
+     ops = List.rev !ops;
+@@ -146,7 +135,6 @@ let rec argspec ?(v2v = false) () =
+     password_crypto = !password_crypto;
+     no_selinux_relabel = !no_selinux_relabel;
+     selinux_relabel_ignored = !selinux_relabel_ignored;
+-    sm_credentials = !sm_credentials;
+   }
+   in
+ 
+@@ -386,35 +374,6 @@ let rec argspec ?(v2v = false) () =
+       s_"Scrub a file"
+     ),
+     Some "FILE", "Scrub a file from the guest.  This is like I<--delete> except that:\n\n=over 4\n\n=item *\n\nIt scrubs the data so a guest could not recover it.\n\n=item *\n\nIt cannot delete directories, only regular files.\n\n=back", false;
+-    (
+-      [ L"sm-attach" ],
+-      Getopt.String (
+-        s_"SELECTOR",
+-        fun s ->
+-          let sel = Subscription_manager.parse_pool_selector s in
+-          List.push_front (`SMAttach sel) ops
+-      ),
+-      s_"Attach to a subscription-manager pool"
+-    ),
+-    Some "SELECTOR", "Attach to a pool using C<subscription-manager>.\n\nSee L<virt-builder(1)/SUBSCRIPTION-MANAGER> for the format of\nthe C<SELECTOR> field.", false;
+-    (
+-      [ L"sm-register" ],
+-      Getopt.Unit (fun () -> List.push_front `SMRegister ops),
+-      s_"Register using subscription-manager"
+-    ),
+-    None, "Register the guest using C<subscription-manager>.\n\nThis requires credentials being set using I<--sm-credentials>.", false;
+-    (
+-      [ L"sm-remove" ],
+-      Getopt.Unit (fun () -> List.push_front `SMRemove ops),
+-      s_"Remove all the subscriptions"
+-    ),
+-    None, "Remove all the subscriptions from the guest using\nC<subscription-manager>.", false;
+-    (
+-      [ L"sm-unregister" ],
+-      Getopt.Unit (fun () -> List.push_front `SMUnregister ops),
+-      s_"Unregister using subscription-manager"
+-    ),
+-    None, "Unregister the guest using C<subscription-manager>.", false;
+     (
+       [ L"ssh-inject" ],
+       Getopt.String (
+@@ -529,16 +488,6 @@ let rec argspec ?(v2v = false) () =
+       s_"Compatibility option doing nothing"
+     ),
+     None, "This is a compatibility option that does nothing.", false;
+-    (
+-      [ L"sm-credentials" ],
+-      Getopt.String (
+-        s_"SELECTOR",
+-        fun s ->
+-          sm_credentials := Some (Subscription_manager.parse_credentials_selector s)
+-      ),
+-      s_"Credentials for subscription-manager"
+-    ),
+-    Some "SELECTOR", "Set the credentials for C<subscription-manager>.\n\nSee L<virt-builder(1)/SUBSCRIPTION-MANAGER> for the format of\nthe C<SELECTOR> field.", false;
+   ]
+   and customize_read_from_file filename =
+     let forbidden_commands = [
+diff --git a/common/mlcustomize/customize_cmdline.mli b/common/mlcustomize/customize_cmdline.mli
+index cc32f3af4..baacda9d3 100644
+--- a/common/mlcustomize/customize_cmdline.mli
++++ b/common/mlcustomize/customize_cmdline.mli
+@@ -77,14 +77,6 @@ and op = [
+       (* --run-command 'CMD+ARGS' *)
+   | `Scrub of string
+       (* --scrub FILE *)
+-  | `SMAttach of Subscription_manager.sm_pool
+-      (* --sm-attach SELECTOR *)
+-  | `SMRegister
+-      (* --sm-register *)
+-  | `SMRemove
+-      (* --sm-remove *)
+-  | `SMUnregister
+-      (* --sm-unregister *)
+   | `SSHInject of string * Ssh_key.ssh_key_selector
+       (* --ssh-inject USER[:SELECTOR] *)
+   | `TarIn of string * string
+@@ -115,8 +107,6 @@ and flags = {
+       (* --no-selinux-relabel *)
+   selinux_relabel_ignored : bool;
+       (* --selinux-relabel *)
+-  sm_credentials : Subscription_manager.sm_credentials option;
+-      (* --sm-credentials SELECTOR *)
+ }
+ 
+ type argspec = Getopt.keys * Getopt.spec * Getopt.doc
+diff --git a/common/mlcustomize/customize_run.ml b/common/mlcustomize/customize_run.ml
+index 64afd3ab5..1baf0f3cf 100644
+--- a/common/mlcustomize/customize_run.ml
++++ b/common/mlcustomize/customize_run.ml
+@@ -279,43 +279,6 @@ let run (g : G.guestfs) root (ops : ops) =
+       message (f_"Scrubbing: %s") path;
+       g#scrub_file path
+ 
+-    | `SMAttach pool ->
+-      (match pool with
+-      | Subscription_manager.PoolAuto ->
+-        message (f_"Attaching to compatible subscriptions");
+-        let cmd = "subscription-manager attach --auto" in
+-        do_run ~display:cmd ~warn_failed_no_network:true cmd
+-      | Subscription_manager.PoolId id ->
+-        message (f_"Attaching to the pool %s") id;
+-        let cmd = sprintf "subscription-manager attach --pool=%s" (quote id) in
+-        do_run ~display:cmd ~warn_failed_no_network:true cmd
+-      )
+-
+-    | `SMRegister ->
+-      message (f_"Registering with subscription-manager");
+-      let creds =
+-        match ops.flags.sm_credentials with
+-        | None ->
+-          error (f_"subscription-manager credentials required for \
+-                    --sm-register")
+-        | Some c -> c in
+-      let cmd = sprintf "subscription-manager register \
+-                         --username=%s --password=%s"
+-                  (quote creds.Subscription_manager.sm_username)
+-                  (quote creds.Subscription_manager.sm_password) in
+-      do_run ~display:"subscription-manager register"
+-             ~warn_failed_no_network:true cmd
+-
+-    | `SMRemove ->
+-      message (f_"Removing all the subscriptions");
+-      let cmd = "subscription-manager remove --all" in
+-      do_run ~display:cmd ~warn_failed_no_network:true cmd
+-
+-    | `SMUnregister ->
+-      message (f_"Unregistering with subscription-manager");
+-      let cmd = "subscription-manager unregister" in
+-      do_run ~display:cmd ~warn_failed_no_network:true cmd
+-
+     | `SSHInject (user, selector) ->
+       if unix_like (g#inspect_get_type root) then (
+         message (f_"SSH key inject: %s") user;
+diff --git a/common/mlcustomize/subscription_manager.ml b/common/mlcustomize/subscription_manager.ml
+deleted file mode 100644
+index 104602462..000000000
+--- a/common/mlcustomize/subscription_manager.ml
++++ /dev/null
+@@ -1,54 +0,0 @@
+-(* virt-customize
+- * Copyright (C) 2015 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-open Std_utils
+-open Tools_utils
+-open Common_gettext.Gettext
+-
+-type sm_credentials = {
+-  sm_username : string;
+-  sm_password : string;
+-}
+-
+-type sm_pool =
+-| PoolAuto
+-| PoolId of string
+-
+-let rec parse_credentials_selector arg =
+-  parse_credentials_selector_list arg (String.nsplit ":" arg)
+-
+-and parse_credentials_selector_list orig_arg = function
+-  | [ username; "password"; password ] ->
+-    { sm_username = username; sm_password = password }
+-  | [ username; "file"; filename ] ->
+-    { sm_username = username; sm_password = read_first_line_from_file filename }
+-  | _ ->
+-    error (f_"invalid sm-credentials selector ‘%s’; see the man page") orig_arg
+-
+-let rec parse_pool_selector arg =
+-  parse_pool_selector_list arg (String.nsplit ":" arg)
+-
+-and parse_pool_selector_list orig_arg = function
+-  | [ "auto" ] ->
+-    PoolAuto
+-  | [ "pool"; pool ] ->
+-    PoolId pool
+-  | [ "file"; filename ] ->
+-    PoolId (read_first_line_from_file filename)
+-  | _ ->
+-    error (f_"invalid sm-attach selector ‘%s’; see the man page") orig_arg
+diff --git a/common/mlcustomize/subscription_manager.mli b/common/mlcustomize/subscription_manager.mli
+deleted file mode 100644
+index bb6b92014..000000000
+--- a/common/mlcustomize/subscription_manager.mli
++++ /dev/null
+@@ -1,34 +0,0 @@
+-(* virt-customize
+- * Copyright (C) 2015 Red Hat Inc.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- *)
+-
+-type sm_credentials = {
+-  sm_username : string;
+-  sm_password : string;
+-}
+-
+-type sm_pool =
+-| PoolAuto                           (** Automatic entitlements. *)
+-| PoolId of string                   (** Specific pool. *)
+-
+-val parse_credentials_selector : string -> sm_credentials
+-(** Parse the selector field in --sm-credentials.  Exits if the format
+-    is not valid. *)
+-
+-val parse_pool_selector : string -> sm_pool
+-(** Parse the selector field in --sm-attach.  Exits if the format
+-    is not valid. *)
+diff --git a/common/mlcustomize/v2v-customize-options.pod b/common/mlcustomize/v2v-customize-options.pod
+index 0974f4592..f02f05dac 100644
+--- a/common/mlcustomize/v2v-customize-options.pod
++++ b/common/mlcustomize/v2v-customize-options.pod
+@@ -338,35 +338,6 @@ It cannot delete directories, only regular files.
+ 
+ This is a compatibility option that does nothing.
+ 
+-=item B<--sm-attach> SELECTOR
+-
+-Attach to a pool using C<subscription-manager>.
+-
+-See L<virt-builder(1)/SUBSCRIPTION-MANAGER> for the format of
+-the C<SELECTOR> field.
+-
+-=item B<--sm-credentials> SELECTOR
+-
+-Set the credentials for C<subscription-manager>.
+-
+-See L<virt-builder(1)/SUBSCRIPTION-MANAGER> for the format of
+-the C<SELECTOR> field.
+-
+-=item B<--sm-register>
+-
+-Register the guest using C<subscription-manager>.
+-
+-This requires credentials being set using I<--sm-credentials>.
+-
+-=item B<--sm-remove>
+-
+-Remove all the subscriptions from the guest using
+-C<subscription-manager>.
+-
+-=item B<--sm-unregister>
+-
+-Unregister the guest using C<subscription-manager>.
+-
+ =item B<--ssh-inject> USER[:SELECTOR]
+ 
+ Inject an ssh key so the given C<USER> will be able to log in over
+diff --git a/common/mlcustomize/v2v-customize-synopsis.pod b/common/mlcustomize/v2v-customize-synopsis.pod
+index 7eb0a941c..4c1a1547b 100644
+--- a/common/mlcustomize/v2v-customize-synopsis.pod
++++ b/common/mlcustomize/v2v-customize-synopsis.pod
+@@ -7,11 +7,9 @@
+     [--link TARGET:LINK[:LINK..]] [--mkdir DIR] [--move SOURCE:DEST]
+     [--password USER:SELECTOR] [--root-password SELECTOR]
+     [--run SCRIPT] [--run-command 'CMD+ARGS'] [--scrub FILE]
+-    [--sm-attach SELECTOR] [--sm-register] [--sm-remove]
+-    [--sm-unregister] [--ssh-inject USER[:SELECTOR]]
+-    [--tar-in TARFILE:REMOTEDIR] [--timezone TIMEZONE] [--touch FILE]
+-    [--truncate FILE] [--truncate-recursive PATH]
+-    [--uninstall PKG,PKG..] [--update] [--upload FILE:DEST]
+-    [--write FILE:CONTENT] [--no-logfile]
++    [--ssh-inject USER[:SELECTOR]] [--tar-in TARFILE:REMOTEDIR]
++    [--timezone TIMEZONE] [--touch FILE] [--truncate FILE]
++    [--truncate-recursive PATH] [--uninstall PKG,PKG..] [--update]
++    [--upload FILE:DEST] [--write FILE:CONTENT] [--no-logfile]
+     [--password-crypto md5|sha256|sha512] [--no-selinux-relabel]
+-    [--selinux-relabel] [--sm-credentials SELECTOR]
++    [--selinux-relabel]

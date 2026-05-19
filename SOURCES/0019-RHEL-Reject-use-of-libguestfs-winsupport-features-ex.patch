@@ -1,4 +1,4 @@
-From 437a345d32fc4f495b116f67747e9ff56e7a6cc7 Mon Sep 17 00:00:00 2001
+From 185264d510814eb1e14c770aa826c82d6a747bb3 Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Tue, 7 Jul 2015 09:28:03 -0400
 Subject: [PATCH] RHEL: Reject use of libguestfs-winsupport features except for
@@ -11,7 +11,7 @@ edits.
  1 file changed, 1 insertion(+)
 
 diff --git a/test-data/phony-guests/make-windows-img.sh b/test-data/phony-guests/make-windows-img.sh
-index 0ec6b4851..9fa29f98b 100755
+index e72013c3d..ac661f180 100755
 --- a/test-data/phony-guests/make-windows-img.sh
 +++ b/test-data/phony-guests/make-windows-img.sh
 @@ -37,6 +37,7 @@ fi
@@ -19,6 +19,6 @@ index 0ec6b4851..9fa29f98b 100755
  # Create a disk image.
  guestfish <<EOF
 +set-program virt-testing
- sparse windows.img-t 512M
+ sparse windows.img-t 2G
  run
  

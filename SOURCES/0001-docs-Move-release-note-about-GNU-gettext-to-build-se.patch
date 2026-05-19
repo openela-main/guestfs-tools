@@ -1,10 +1,11 @@
-From bf4fef4f2b45a2016c42094f8e4fe18abc8d90e2 Mon Sep 17 00:00:00 2001
+From 3a99e87bdee6c20a6286aa3e10bb2c2d896fb2ed Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Wed, 21 May 2025 15:02:44 +0100
 Subject: [PATCH] docs: Move release note about GNU gettext to build section
 
 Fixes: commit 9b7410c220f1111e6acef88efbbaee3fea4019b8
 Updates: commit 80ce443e5eb7323e9b7b5cef30b8f7673ca51d67
+(cherry picked from commit bf4fef4f2b45a2016c42094f8e4fe18abc8d90e2)
 ---
  docs/guestfs-tools-release-notes-1.54.pod | 4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)

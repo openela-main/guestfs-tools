@@ -1,0 +1,52 @@
+From c715ed2a3b82ce6cfcd44fbb8a29476621ebe049 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Mon, 3 Nov 2025 15:56:56 +0000
+Subject: [PATCH] inspector: Add <windows_group_policy/> is Windows GPOs
+ detected in guest
+
+Fixes: https://issues.redhat.com/browse/RHEL-125955
+(cherry picked from commit d56129cfccedd26739ee5b813060e7547d977c53)
+---
+ inspector/inspector.c        | 3 +++
+ inspector/virt-inspector.rng | 1 +
+ m4/guestfs-libraries.m4      | 1 +
+ 3 files changed, 5 insertions(+)
+
+diff --git a/inspector/inspector.c b/inspector/inspector.c
+index cccc209d0..6b5d50157 100644
+--- a/inspector/inspector.c
++++ b/inspector/inspector.c
+@@ -439,6 +439,9 @@ output_root (xmlTextWriterPtr xo, char *root)
+     if (str)
+       single_element ("windows_current_control_set", str);
+     free (str);
++    i = guestfs_inspect_get_windows_group_policy (g, root);
++    if (i > 0)
++      empty_element ("windows_group_policy");
+     guestfs_pop_error_handler (g);
+ 
+     str = guestfs_inspect_get_hostname (g, root);
+diff --git a/inspector/virt-inspector.rng b/inspector/virt-inspector.rng
+index e30686d4f..90f74cf78 100644
+--- a/inspector/virt-inspector.rng
++++ b/inspector/virt-inspector.rng
+@@ -35,6 +35,7 @@
+             <element name="minor_version"><text/></element>
+             <optional><element name="windows_systemroot"><text/></element></optional>
+             <optional><element name="windows_current_control_set"><text/></element></optional>
++            <optional><element name="windows_group_policy"><empty/></element></optional>
+             <optional><ref name="ospackageformat"/></optional>
+             <optional><ref name="ospackagemanagement"/></optional>
+             <optional><element name="hostname"><text/></element></optional>
+diff --git a/m4/guestfs-libraries.m4 b/m4/guestfs-libraries.m4
+index 4ca86161c..02f2281f8 100644
+--- a/m4/guestfs-libraries.m4
++++ b/m4/guestfs-libraries.m4
+@@ -21,6 +21,7 @@ dnl Of course we need libguestfs.
+ dnl
+ dnl We need libguestfs 1.57.1 for guestfs_setfiles.
+ dnl We need libguestfs 1.57.6 for guestfs_inspect_get_applications2 app2_class.
++dnl We need libguestfs 1.57.6 for guestfs_inspect_get_windows_group_policy
+ PKG_CHECK_MODULES([LIBGUESTFS], [libguestfs >= 1.57.6])
+ printf "libguestfs version is "; $PKG_CONFIG --modversion libguestfs
+ 

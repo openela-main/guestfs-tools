@@ -1,0 +1,72 @@
+From 63df59b34bb0a19f6b1e2821250106691d1945a9 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Mon, 3 Nov 2025 15:26:19 +0000
+Subject: [PATCH] inspector: Add new <class> field to output of virt-inspector
+
+Rebase common submodule to pick up:
+
+  Richard W.M. Jones (1):
+      structs/structs-print.c: Update this generated file
+
+Fixes: https://issues.redhat.com/browse/RHEL-125955
+(cherry picked from commit 53e59d0189dc71d78559478c4924f1a1a994c455)
+---
+ common                       | 2 +-
+ inspector/inspector.c        | 2 ++
+ inspector/virt-inspector.rng | 1 +
+ m4/guestfs-libraries.m4      | 3 ++-
+ 4 files changed, 6 insertions(+), 2 deletions(-)
+
+Submodule common 90399dd18..b54ba2031:
+diff --git a/common/structs/structs-print.c b/common/structs/structs-print.c
+index bfe007cde..8c376b0ee 100644
+--- a/common/structs/structs-print.c
++++ b/common/structs/structs-print.c
+@@ -63,7 +63,7 @@ guestfs_int_print_application2_indent (struct guestfs_application2 *application2
+   fprintf (dest, "%sapp2_source_package: %s%s", indent, application2->app2_source_package, linesep);
+   fprintf (dest, "%sapp2_summary: %s%s", indent, application2->app2_summary, linesep);
+   fprintf (dest, "%sapp2_description: %s%s", indent, application2->app2_description, linesep);
+-  fprintf (dest, "%sapp2_spare1: %s%s", indent, application2->app2_spare1, linesep);
++  fprintf (dest, "%sapp2_class: %s%s", indent, application2->app2_class, linesep);
+   fprintf (dest, "%sapp2_spare2: %s%s", indent, application2->app2_spare2, linesep);
+   fprintf (dest, "%sapp2_spare3: %s%s", indent, application2->app2_spare3, linesep);
+   fprintf (dest, "%sapp2_spare4: %s%s", indent, application2->app2_spare4, linesep);
+diff --git a/inspector/inspector.c b/inspector/inspector.c
+index 1177f44a4..cccc209d0 100644
+--- a/inspector/inspector.c
++++ b/inspector/inspector.c
+@@ -697,6 +697,8 @@ output_applications (xmlTextWriterPtr xo, char *root)
+           single_element ("summary", apps->val[i].app2_summary);
+         if (apps->val[i].app2_description && apps->val[i].app2_description[0])
+           single_element ("description", apps->val[i].app2_description);
++        if (apps->val[i].app2_class && apps->val[i].app2_class[0])
++          single_element ("class", apps->val[i].app2_class);
+       } end_element ();
+     }
+   } end_element ();
+diff --git a/inspector/virt-inspector.rng b/inspector/virt-inspector.rng
+index 29c5798e1..e30686d4f 100644
+--- a/inspector/virt-inspector.rng
++++ b/inspector/virt-inspector.rng
+@@ -212,6 +212,7 @@
+           <optional><element name="source_package"><text/></element></optional>
+           <optional><element name="summary"><text/></element></optional>
+           <optional><element name="description"><text/></element></optional>
++          <optional><element name="class"><text/></element></optional>
+         </element>
+       </zeroOrMore>
+     </element>
+diff --git a/m4/guestfs-libraries.m4 b/m4/guestfs-libraries.m4
+index 82e62d54f..4ca86161c 100644
+--- a/m4/guestfs-libraries.m4
++++ b/m4/guestfs-libraries.m4
+@@ -20,7 +20,8 @@ dnl Any C libraries required by the libguestfs C library (not the daemon).
+ dnl Of course we need libguestfs.
+ dnl
+ dnl We need libguestfs 1.57.1 for guestfs_setfiles.
+-PKG_CHECK_MODULES([LIBGUESTFS], [libguestfs >= 1.57.1])
++dnl We need libguestfs 1.57.6 for guestfs_inspect_get_applications2 app2_class.
++PKG_CHECK_MODULES([LIBGUESTFS], [libguestfs >= 1.57.6])
+ printf "libguestfs version is "; $PKG_CONFIG --modversion libguestfs
+ 
+ dnl Test if it's GNU or XSI strerror_r.

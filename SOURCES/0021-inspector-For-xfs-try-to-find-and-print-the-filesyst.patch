@@ -1,0 +1,139 @@
+From 6c1ea9c15b78274ea0907aa6a1214c294101aa6a Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Mon, 26 Jan 2026 15:26:23 +0000
+Subject: [PATCH] inspector: For xfs, try to find and print the filesystem
+ version
+
+RHEL 7.0, 7.1 and (possibly*) 7.2 used XFS version 4.  New versions of
+RHEL use XFS v5.
+
+Support even for opening version 4 filesystems was removed in RHEL 10
+(and will be removed altogether from the Linux kernel in 2030).  This
+prevents virt-v2v conversions or libguestfs in general from accessing
+those filesystems.
+
+Therefore it's a good idea to be able to tell the XFS filesystem
+version and print that in virt-inspector output.
+
+The new output will look like:
+
+    <filesystems>
+      <filesystem dev="/dev/sda2">
+        <type version="5">xfs</type>
+        <uuid>35904e42-4e3d-40c7-a4ef-213786c18339</uuid>
+      </filesystem>
+
+To work this requires libguestfs >= 1.59.2 (with guestfs_xfs_info2).
+Older versions of libguestfs, or if we cannot tell the version, will
+not have the version attribute.
+
+* = The virt-builder rhel-7.2 image definitely uses XFS v4, but it may
+have been built from an early (pre-)release of 7.2.  Later RHEL 7.2
+seems to use XFS v5.
+
+Fixes: https://issues.redhat.com/browse/RHEL-144074
+(cherry picked from commit bb210ca4330bc307d972201faf713d4c3c49fc6a)
+---
+ inspector/inspector.c        | 54 ++++++++++++++++++++++++++++++++----
+ inspector/virt-inspector.rng |  9 +++++-
+ 2 files changed, 56 insertions(+), 7 deletions(-)
+
+diff --git a/inspector/inspector.c b/inspector/inspector.c
+index 6b5d50157..fc6b9f0d0 100644
+--- a/inspector/inspector.c
++++ b/inspector/inspector.c
+@@ -569,6 +569,42 @@ output_mountpoints (xmlTextWriterPtr xo, char *root)
+   } end_element ();
+ }
+ 
++static const char *
++get_filesystem_version (const char *dev, const char *fs_type)
++{
++  const char *version = NULL;
++
++#ifdef GUESTFS_HAVE_XFS_INFO2
++  /* For type=xfs, try to guess the filesystem version. */
++  if (STREQ (fs_type, "xfs")) {
++    CLEANUP_FREE_STRING_LIST char **hash = NULL;
++    size_t i;
++
++    guestfs_push_error_handler (g, NULL, NULL);
++
++    hash = guestfs_xfs_info2 (g, dev);
++    if (hash) {
++      for (i = 0; hash[i] != NULL; i += 2) {
++        if (STREQ (hash[i], "meta-data.crc")) {
++          if (STREQ (hash[i+1], "0"))
++            version = "4";
++          else if (STREQ (hash[i+1], "1"))
++            version = "5";
++          break;
++        }
++        /* If new XFS versions are added in future then we can test
++         * for new fields here ...
++         */
++      }
++    }
++
++    guestfs_pop_error_handler (g);
++  }
++#endif /* GUESTFS_HAVE_XFS_INFO2 */
++
++  return version;
++}
++
+ static void
+ output_filesystems (xmlTextWriterPtr xo, char *root)
+ {
+@@ -586,19 +622,25 @@ output_filesystems (xmlTextWriterPtr xo, char *root)
+ 
+   start_element ("filesystems") {
+     for (i = 0; filesystems[i] != NULL; ++i) {
+-      str = guestfs_canonical_device_name (g, filesystems[i]);
+-      if (!str)
++      CLEANUP_FREE char *dev =
++        guestfs_canonical_device_name (g, filesystems[i]);
++      if (!dev)
+         exit (EXIT_FAILURE);
+ 
+       start_element ("filesystem") {
+-        attribute ("dev", str);
+-        free (str);
++        attribute ("dev", dev);
+ 
+         guestfs_push_error_handler (g, NULL, NULL);
+ 
+         str = guestfs_vfs_type (g, filesystems[i]);
+-        if (str && str[0])
+-          single_element ("type", str);
++        if (str && str[0]) {
++          const char *version = get_filesystem_version (dev, str);
++          start_element ("type") {
++            if (version)
++              attribute ("version", version);
++            string (str);
++          } end_element ();
++        }
+         free (str);
+ 
+         str = guestfs_vfs_label (g, filesystems[i]);
+diff --git a/inspector/virt-inspector.rng b/inspector/virt-inspector.rng
+index 90f74cf78..aeec082ff 100644
+--- a/inspector/virt-inspector.rng
++++ b/inspector/virt-inspector.rng
+@@ -175,7 +175,14 @@
+         <element name="filesystem">
+           <attribute name="dev"><text/></attribute>
+           <interleave>
+-            <optional><element name="type"><text/></element></optional>
++            <optional>
++              <element name="type">
++                <optional>
++                  <attribute name="version"><text/></attribute>
++                </optional>
++                <text/>
++              </element>
++            </optional>
+             <optional><element name="label"><text/></element></optional>
+             <optional><element name="uuid"><text/></element></optional>
+           </interleave>

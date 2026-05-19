@@ -1,0 +1,33 @@
+From 1fca99c9bed60cd9a9c62826d4e6995052d0c5dd Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 2 Sep 2025 09:06:33 +0100
+Subject: [PATCH] builder/templates/make-template.ml: Use quoted string
+ literals for regexps
+
+(cherry picked from commit aafb271e8ffd961c529f90ef65df75a70102f0fc)
+---
+ builder/templates/make-template.ml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/builder/templates/make-template.ml b/builder/templates/make-template.ml
+index a69d3ad3f..f8b41209e 100755
+--- a/builder/templates/make-template.ml
++++ b/builder/templates/make-template.ml
+@@ -374,7 +374,7 @@ and os_of_string os ver =
+      eprintf "%s: unknown or unsupported OS (%s, %s)\n" prog os ver; exit 1
+ 
+ and parse_major_minor ver =
+-  let rex = Str.regexp "^\\([0-9]+\\)\\.\\([0-9]+\\)$" in
++  let rex = Str.regexp {|^\([0-9]+\)\.\([0-9]+\)$|} in
+   if Str.string_match rex ver 0 then (
+     int_of_string (Str.matched_group 1 ver),
+     int_of_string (Str.matched_group 2 ver)
+@@ -1631,7 +1631,7 @@ and read_revision filename =
+   | None -> `No_file
+   | Some chan ->
+      let r = ref `No_revision in
+-     let rex = Str.regexp "^revision=\\([0-9]+\\)$" in
++     let rex = Str.regexp {|^revision=\([0-9]+\)$|} in
+      (try
+        let rec loop () =
+          let line = input_line chan in
