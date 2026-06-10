@@ -1,0 +1,61 @@
+From bdd1c1465eab264e50767c2a2d67d6a346033fcf Mon Sep 17 00:00:00 2001
+From: Srihari Parimi <sparimi@redhat.com>
+Date: Fri, 1 May 2026 20:20:47 +0530
+Subject: [PATCH] virt-builder: document exit code 250 for Windows firstboot
+
+Update the FIRST BOOT SCRIPTS section in virt-builder.pod to
+document the behavior of exit code 250 for Windows guests.
+
+Code 250 explicitly indicates that a reboot is not required,
+allowing firstboot.bat to proceed to the next script without
+shutting down. The section is now organized into a bulleted
+list for better readability, covering codes 250, 249
+(failure/retry), and general success codes.
+
+Fixes: https://redhat.atlassian.net/browse/RHEL-170706
+(cherry picked from commit 0fa9030e97e419fc03f61842e9e6df689623d345)
+---
+ builder/virt-builder.pod | 29 +++++++++++++++++++++++------
+ 1 file changed, 23 insertions(+), 6 deletions(-)
+
+diff --git a/builder/virt-builder.pod b/builder/virt-builder.pod
+index 59dd197f0..fcffecbee 100644
+--- a/builder/virt-builder.pod
++++ b/builder/virt-builder.pod
+@@ -874,13 +874,30 @@ C<VIRT_TOOLS_DATA_DIR> environment variable; if not set, a compiled-in
+ default will be used (something like F</usr/share/virt-tools>).
+ 
+ On Windows guests, firstboot scripts are executed by a dedicated
+-C<firstboot.bat> script which manages the execution flow.
++C<firstboot.bat> script which manages the execution flow. It monitors
++the exit code of each firstboot script:
+ 
+-This script monitors the exit code of each firstboot task. Any exit
+-code other than B<249> is considered a success, and the script moves
+-on to the next task. If a script returns B<249>, it is treated as a 
+-failure, and the system will attempt to run that script again on the
+-next boot.
++=over 4
++
++=item * B<250>
++
++The script indicates that a system reboot is not required at
++this stage. The C<firstboot.bat> script will continue
++immediately to the next script in the sequence without
++initiating a shutdown.
++
++=item * B<249>
++
++The script is treated as a failure. The C<firstboot.bat> script
++stops execution, and the system will attempt to run this script
++again on the next boot.
++
++=item * B<Any other code>
++
++The script is considered a success. The C<firstboot.bat> script
++proceeds to the next script in the sequence.
++
++=back
+ 
+ The output of the first boot scripts is available in the guest as
+ F<C:\Program Files\Guestfs\Firstboot\log.txt>.

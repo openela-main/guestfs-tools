@@ -1,0 +1,31 @@
+From 8f1b3b6d6c1c24d1cdaeef5bdc22238c709f48ee Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 7 May 2026 10:25:04 +0100
+Subject: [PATCH] customize: Document location of Windows sentinel file
+
+Link: https://github.com/libguestfs/libguestfs-common/commit/cb0e19b754b060bf9e783cbd1510c9719dfc9730
+(cherry picked from commit 592f11c86c07b9a491d78ca07ba10b5cbeca2926)
+---
+ customize/virt-customize.pod | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/customize/virt-customize.pod b/customize/virt-customize.pod
+index 71b13e613..c21192d1b 100644
+--- a/customize/virt-customize.pod
++++ b/customize/virt-customize.pod
+@@ -281,6 +281,15 @@ next script.
+ 
+ =back
+ 
++=head2 Windows sentinel file
++
++On Windows guests (only) a sentinel file is written into the guest
++once all firstboot scripts have finished running.  You can use this to
++detect if the Windows guest is ready (eg. has finished a
++L<virt-v2v(1)> conversion).  The default location for this file is:
++
++ C:\Program Files\Guestfs\Firstboot\complete
++
+ =head2 Auxiliary tools
+ 
+ On Windows guests, F<rhsrvany.exe>, available from sources at

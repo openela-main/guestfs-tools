@@ -1,4 +1,4 @@
-From 706d6dfd2a36d1b176f2a64d897b249eeec4d80f Mon Sep 17 00:00:00 2001
+From 83d338a7691d6c1ef169fb62011854bb9b450917 Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Thu, 5 Feb 2026 11:57:33 +0000
 Subject: [PATCH] Sort some entries in .gitignore into order

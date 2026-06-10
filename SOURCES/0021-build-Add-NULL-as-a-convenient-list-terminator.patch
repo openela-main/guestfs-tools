@@ -1,4 +1,4 @@
-From c9022d24dbfb5d715668fd810716753d096648f0 Mon Sep 17 00:00:00 2001
+From 590c1aae4d7baadd21ff862c96d4516f52ae9c32 Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Mon, 22 Sep 2025 10:58:29 +0100
 Subject: [PATCH] build: Add $(NULL) as a convenient list terminator

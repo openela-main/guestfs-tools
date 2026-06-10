@@ -1,0 +1,91 @@
+From 4c926d7a4b2dc5ac5eaee443f1a901f9e3ad99d4 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 5 May 2026 12:18:51 +0100
+Subject: [PATCH] customize, sysprep: Move firstboot docs from sysprep ->
+ customize
+
+As a first step towards consolidating all firstboot documentation in
+one place, move the "FIRSTBOOT VS SCRIPTS" documentation from
+virt-sysprep(1) to virt-customize(1).  This section will later be
+reworked and expanded, but in this commit it's just a straight move.
+
+(cherry picked from commit 0a148a87541ed5f5b934103e2a1bc7f701d89833)
+---
+ customize/virt-customize.pod | 26 ++++++++++++++++++++++++++
+ sysprep/virt-sysprep.pod     | 26 --------------------------
+ 2 files changed, 26 insertions(+), 26 deletions(-)
+
+diff --git a/customize/virt-customize.pod b/customize/virt-customize.pod
+index 9fee64ebc..e72e35fac 100644
+--- a/customize/virt-customize.pod
++++ b/customize/virt-customize.pod
+@@ -240,6 +240,32 @@ Enable tracing of libguestfs API calls.
+ 
+ __CUSTOMIZE_OPTIONS__
+ 
++=head1 FIRSTBOOT
++
++The two options I<--firstboot> and I<--script> both supply shell
++scripts that are run against the guest.  However these two options are
++significantly different.
++
++I<--firstboot script> uploads the file C<script> into the guest
++and arranges that it will run, in the guest, when the guest is
++next booted.  (The script will only run once, at the "first boot").
++
++I<--script script> runs the shell C<script> I<on the host>, with its
++current directory inside the guest filesystem.
++
++If you needed, for example, to C<yum install> new packages, then you
++I<must not> use I<--script> for this, since that would (a) run the
++C<yum> command on the host and (b) wouldn't have access to the same
++resources (repositories, keys, etc.) as the guest.  Any command that
++needs to run on the guest I<must> be run via I<--firstboot>.
++
++On the other hand if you need to make adjustments to the guest
++filesystem (eg. copying in files), then I<--script> is ideal since (a)
++it has access to the host filesystem and (b) you will get immediate
++feedback on errors.
++
++Either or both options can be used multiple times on the command line.
++
+ =head1 SELINUX
+ 
+ For guests which make use of SELinux, special handling for them might
+diff --git a/sysprep/virt-sysprep.pod b/sysprep/virt-sysprep.pod
+index 4f552b385..4e91a462d 100644
+--- a/sysprep/virt-sysprep.pod
++++ b/sysprep/virt-sysprep.pod
+@@ -310,32 +310,6 @@ is given.
+ 
+ __OPERATIONS__
+ 
+-=head1 FIRSTBOOT VS SCRIPT
+-
+-The two options I<--firstboot> and I<--script> both supply shell
+-scripts that are run against the guest.  However these two options are
+-significantly different.
+-
+-I<--firstboot script> uploads the file C<script> into the guest
+-and arranges that it will run, in the guest, when the guest is
+-next booted.  (The script will only run once, at the "first boot").
+-
+-I<--script script> runs the shell C<script> I<on the host>, with its
+-current directory inside the guest filesystem.
+-
+-If you needed, for example, to C<yum install> new packages, then you
+-I<must not> use I<--script> for this, since that would (a) run the
+-C<yum> command on the host and (b) wouldn't have access to the same
+-resources (repositories, keys, etc.) as the guest.  Any command that
+-needs to run on the guest I<must> be run via I<--firstboot>.
+-
+-On the other hand if you need to make adjustments to the guest
+-filesystem (eg. copying in files), then I<--script> is ideal since (a)
+-it has access to the host filesystem and (b) you will get immediate
+-feedback on errors.
+-
+-Either or both options can be used multiple times on the command line.
+-
+ =head1 SECURITY
+ 
+ Virtual machines that employ full disk encryption I<internally to the

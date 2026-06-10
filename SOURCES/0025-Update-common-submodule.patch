@@ -1,0 +1,25 @@
+From f0e429ec0eadf74594fd3202f77b7191963df771 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Wed, 10 Dec 2025 14:06:10 +0000
+Subject: [PATCH] Update common submodule
+
+Fixes: commit 7ee462f9f9c2235b2d3dacbf3cd1006060108635
+(cherry picked from commit 6436529d116dd415b26841d7b4bcee7564a97b0f)
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common d03dd8547..cf663a835:
+diff --git a/common/mlcustomize/firstboot.ml b/common/mlcustomize/firstboot.ml
+index c1738e749..f29884c88 100644
+--- a/common/mlcustomize/firstboot.ml
++++ b/common/mlcustomize/firstboot.ml
+@@ -295,7 +295,7 @@ exit /b
+ 
+ :main
+ echo starting firstboot service
+-echo effective user: %USERNAME% domain: %USERDOMAIN%
++echo effective user: %%USERNAME%% domain: %%USERDOMAIN%%
+ 
+ if not exist "%%scripts_done%%" (
+   mkdir "%%scripts_done%%"

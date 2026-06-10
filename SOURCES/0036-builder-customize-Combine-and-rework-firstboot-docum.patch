@@ -1,0 +1,255 @@
+From a199dd52457658337511b568d8c1b3cbbf134fcb Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 5 May 2026 12:33:14 +0100
+Subject: [PATCH] builder, customize: Combine and rework firstboot
+ documentation
+
+Move the firstboot documentation to virt-customize(1)/FIRSTBOOT, and
+combine it with the existing documentation, and rework it.
+
+Update common submodule:
+
+  Richard W.M. Jones (1):
+        mlcustomize: Update generated files
+
+(cherry picked from commit 5a3e8dc37cdb0efd2cbe0901108ac3f9197509f8)
+---
+ builder/virt-builder.pod     | 66 ------------------------------------
+ common                       |  2 +-
+ customize/virt-customize.pod | 64 +++++++++++++++++++++++++++++++---
+ 3 files changed, 60 insertions(+), 72 deletions(-)
+
+diff --git a/builder/virt-builder.pod b/builder/virt-builder.pod
+index fcffecbee..b4db0cbb5 100644
+--- a/builder/virt-builder.pod
++++ b/builder/virt-builder.pod
+@@ -838,72 +838,6 @@ In any case, the F<~USER/.ssh> directory and the
+ F<~USER/.ssh/authorized_keys> file will be created if not existing
+ already.
+ 
+-=head2 FIRST BOOT SCRIPTS
+-
+-The I<--firstboot> and I<--firstboot-command> options allow you to
+-execute commands at the first boot of the guest.  To do so, an init
+-script for the guest init system is installed, which takes care of
+-running all the added scripts and commands.
+-
+-Supported operating systems are:
+-
+-=over 4
+-
+-=item Linux
+-
+-Init systems supported are: systemd, System-V init (known also as sysvinit),
+-and Upstart (using the System-V scripts).
+-
+-Note that usually init scripts run as root, but with a more limited
+-environment than what could be available from a normal shell:
+-for example, C<$HOME> may be unset or empty.
+-
+-The output of the first boot scripts is available in the guest as
+-F<~root/virt-sysprep-firstboot.log>.
+-
+-=item Windows
+-
+-F<rhsrvany.exe>, available from sources at
+-L<https://github.com/rwmjones/rhsrvany>, or F<pvvxsvc.exe>, available
+-with SUSE VMDP is installed to run the
+-first boot scripts.  It is required, and the setup of first boot
+-scripts will fail if it is not present.
+-
+-F<rhsrvany.exe> or F<pvvxsvc.exe> is copied from the location pointed to by the
+-C<VIRT_TOOLS_DATA_DIR> environment variable; if not set, a compiled-in
+-default will be used (something like F</usr/share/virt-tools>).
+-
+-On Windows guests, firstboot scripts are executed by a dedicated
+-C<firstboot.bat> script which manages the execution flow. It monitors
+-the exit code of each firstboot script:
+-
+-=over 4
+-
+-=item * B<250>
+-
+-The script indicates that a system reboot is not required at
+-this stage. The C<firstboot.bat> script will continue
+-immediately to the next script in the sequence without
+-initiating a shutdown.
+-
+-=item * B<249>
+-
+-The script is treated as a failure. The C<firstboot.bat> script
+-stops execution, and the system will attempt to run this script
+-again on the next boot.
+-
+-=item * B<Any other code>
+-
+-The script is considered a success. The C<firstboot.bat> script
+-proceeds to the next script in the sequence.
+-
+-=back
+-
+-The output of the first boot scripts is available in the guest as
+-F<C:\Program Files\Guestfs\Firstboot\log.txt>.
+-
+-=back
+-
+ =head2 INSTALLATION PROCESS
+ 
+ When you invoke virt-builder, installation proceeds as follows:
+Submodule common 228449739..dd34aebb4:
+diff --git a/common/mlcustomize/customize-options.pod b/common/mlcustomize/customize-options.pod
+index c8de3953c..95767cc73 100644
+--- a/common/mlcustomize/customize-options.pod
++++ b/common/mlcustomize/customize-options.pod
+@@ -161,10 +161,7 @@ conveniently wraps the command up in a single line script for you.
+ You can have multiple I<--firstboot> options.  They run in the same
+ order that they appear on the command line.
+ 
+-Please take a look at L<virt-builder(1)/FIRST BOOT SCRIPTS> for more
+-information and caveats about the first boot scripts.
+-
+-See also I<--run>.
++See also: L<virt-customize(1)/FIRSTBOOT>, I<--run>.
+ 
+ =item B<--firstboot-command> 'CMD+ARGS'
+ 
+@@ -174,10 +171,7 @@ boots up (as root, late in the boot process).
+ You can have multiple I<--firstboot> options.  They run in the same
+ order that they appear on the command line.
+ 
+-Please take a look at L<virt-builder(1)/FIRST BOOT SCRIPTS> for more
+-information and caveats about the first boot scripts.
+-
+-See also I<--run>.
++See also: L<virt-customize(1)/FIRSTBOOT>, I<--run>.
+ 
+ =item B<--firstboot-install> PKG,PKG..
+ 
+diff --git a/common/mlcustomize/customize_cmdline.ml b/common/mlcustomize/customize_cmdline.ml
+index 786f4ee49..b8eda519d 100644
+--- a/common/mlcustomize/customize_cmdline.ml
++++ b/common/mlcustomize/customize_cmdline.ml
+@@ -252,13 +252,13 @@ let rec argspec ?(v2v = false) () =
+       Getopt.String (s_"SCRIPT", fun s -> List.push_front (`FirstbootScript s) ops),
+       s_"Run script at first guest boot"
+     ),
+-    Some "SCRIPT", "Install C<SCRIPT> inside the guest, so that when the guest first boots\nup, the script runs (as root, late in the boot process).\n\nThe script is automatically chmod +x after installation in the guest.\n\nThe alternative version I<--firstboot-command> is the same, but it\nconveniently wraps the command up in a single line script for you.\n\nYou can have multiple I<--firstboot> options.  They run in the same\norder that they appear on the command line.\n\nPlease take a look at L<virt-builder(1)/FIRST BOOT SCRIPTS> for more\ninformation and caveats about the first boot scripts.\n\nSee also I<--run>.", false;
++    Some "SCRIPT", "Install C<SCRIPT> inside the guest, so that when the guest first boots\nup, the script runs (as root, late in the boot process).\n\nThe script is automatically chmod +x after installation in the guest.\n\nThe alternative version I<--firstboot-command> is the same, but it\nconveniently wraps the command up in a single line script for you.\n\nYou can have multiple I<--firstboot> options.  They run in the same\norder that they appear on the command line.\n\nSee also: L<virt-customize(1)/FIRSTBOOT>, I<--run>.", false;
+     (
+       [ L"firstboot-command" ],
+       Getopt.String (s_"'CMD+ARGS'", fun s -> List.push_front (`FirstbootCommand s) ops),
+       s_"Run command at first guest boot"
+     ),
+-    Some "'CMD+ARGS'", "Run command (and arguments) inside the guest when the guest first\nboots up (as root, late in the boot process).\n\nYou can have multiple I<--firstboot> options.  They run in the same\norder that they appear on the command line.\n\nPlease take a look at L<virt-builder(1)/FIRST BOOT SCRIPTS> for more\ninformation and caveats about the first boot scripts.\n\nSee also I<--run>.", false;
++    Some "'CMD+ARGS'", "Run command (and arguments) inside the guest when the guest first\nboots up (as root, late in the boot process).\n\nYou can have multiple I<--firstboot> options.  They run in the same\norder that they appear on the command line.\n\nSee also: L<virt-customize(1)/FIRSTBOOT>, I<--run>.", false;
+     (
+       [ L"firstboot-install" ],
+       Getopt.String (
+diff --git a/common/mlcustomize/v2v-customize-options.pod b/common/mlcustomize/v2v-customize-options.pod
+index f02f05dac..6252ffe98 100644
+--- a/common/mlcustomize/v2v-customize-options.pod
++++ b/common/mlcustomize/v2v-customize-options.pod
+@@ -161,10 +161,7 @@ conveniently wraps the command up in a single line script for you.
+ You can have multiple I<--firstboot> options.  They run in the same
+ order that they appear on the command line.
+ 
+-Please take a look at L<virt-builder(1)/FIRST BOOT SCRIPTS> for more
+-information and caveats about the first boot scripts.
+-
+-See also I<--run>.
++See also: L<virt-customize(1)/FIRSTBOOT>, I<--run>.
+ 
+ =item B<--firstboot-command> 'CMD+ARGS'
+ 
+@@ -174,10 +171,7 @@ boots up (as root, late in the boot process).
+ You can have multiple I<--firstboot> options.  They run in the same
+ order that they appear on the command line.
+ 
+-Please take a look at L<virt-builder(1)/FIRST BOOT SCRIPTS> for more
+-information and caveats about the first boot scripts.
+-
+-See also I<--run>.
++See also: L<virt-customize(1)/FIRSTBOOT>, I<--run>.
+ 
+ =item B<--firstboot-install> PKG,PKG..
+ 
+diff --git a/customize/virt-customize.pod b/customize/virt-customize.pod
+index e72e35fac..71b13e613 100644
+--- a/customize/virt-customize.pod
++++ b/customize/virt-customize.pod
+@@ -242,16 +242,70 @@ __CUSTOMIZE_OPTIONS__
+ 
+ =head1 FIRSTBOOT
+ 
++The I<--firstboot> and I<--firstboot-command> options allow you to
++execute commands at the first boot of the guest.  To do so, an init
++script for the guest init system is installed, which takes care of
++running all the added scripts and commands.
++
++=head2 Log file
++
++On Linux, output from the scripts is written to
++S<F<~root/virt-sysprep-firstboot.log>> inside the guest.
++
++On Windows, output is written to
++S<F<C:\Program Files\Guestfs\Firstboot\log.txt>> inside the guest.
++
++=head2 Windows firstboot batch file exit codes
++
++On Windows guests (only) the exit code of batch files controls the
++execution flow and whether Windows will reboot between each script:
++
++=over 4
++
++=item * 249
++
++The batch file is treated as a failure.  The batch file will be run
++again on next reboot.  (Be careful that batch files do not
++continuously give this exit code, otherwise Windows will boot loop.)
++
++=item * 250
++
++The script indicates that a system reboot is not required at this
++stage.  The next script in the sequence will run without initiating a
++reboot.
++
++=item * Any other code
++
++This script is considered successful.  Windows will reboot and run the
++next script.
++
++=back
++
++=head2 Auxiliary tools
++
++On Windows guests, F<rhsrvany.exe>, available from sources at
++L<https://github.com/rwmjones/rhsrvany>, or F<pvvxsvc.exe>, available
++with SUSE VMDP, is installed to run the first boot scripts.  One of
++these is required, and the setup of first boot scripts will fail if
++not present.
++
++F<rhsrvany.exe> or F<pvvxsvc.exe> is copied from the location pointed
++to by the C<VIRT_TOOLS_DATA_DIR> environment variable; if not set, a
++compiled-in default will be used (something like
++F</usr/share/virt-tools>).
++
++=head2 I<--firstboot> vs I<--script>
++
+ The two options I<--firstboot> and I<--script> both supply shell
+ scripts that are run against the guest.  However these two options are
+ significantly different.
+ 
+-I<--firstboot script> uploads the file C<script> into the guest
+-and arranges that it will run, in the guest, when the guest is
+-next booted.  (The script will only run once, at the "first boot").
++I<--firstboot script> uploads the file C<script> into the guest and
++arranges that it will run, in the guest, when the guest is next
++booted.
+ 
+-I<--script script> runs the shell C<script> I<on the host>, with its
+-current directory inside the guest filesystem.
++I<--script> runs the shell script I<on the host>, with its current
++directory inside the guest filesystem.
+ 
+ If you needed, for example, to C<yum install> new packages, then you
+ I<must not> use I<--script> for this, since that would (a) run the

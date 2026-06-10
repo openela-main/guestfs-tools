@@ -16,7 +16,7 @@
 Summary:       Tools to access and modify virtual machine disk images
 Name:          guestfs-tools
 Version:       1.54.0
-Release:       9%{?dist}
+Release:       10%{?dist}
 License:       GPL-2.0-or-later AND LGPL-2.0-or-later
 
 # Build only for architectures that have a kernel
@@ -63,20 +63,34 @@ Patch0015:     0015-pod-Document-removal-of-sm-options.patch
 Patch0016:     0016-test-data-phony-guests-Increase-size-of-Windows-imag.patch
 Patch0017:     0017-inspector-Add-new-class-field-to-output-of-virt-insp.patch
 Patch0018:     0018-inspector-Add-windows_group_policy-is-Windows-GPOs-d.patch
-Patch0019:     0019-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
-Patch0020:     0020-RHEL-builder-Disable-opensuse-repository.patch
-Patch0021:     0021-inspector-For-xfs-try-to-find-and-print-the-filesyst.patch
-Patch0022:     0022-Sort-some-entries-in-.gitignore-into-order.patch
-Patch0023:     0023-build-Add-NULL-as-a-convenient-list-terminator.patch
-Patch0024:     0024-Move-virt-filesystems-virt-log-virt-ls-virt-tail-to-.patch
-Patch0025:     0025-filesystems-Optionally-display-filesystem-version.patch
+Patch0019:     0019-inspector-For-xfs-try-to-find-and-print-the-filesyst.patch
+Patch0020:     0020-Sort-some-entries-in-.gitignore-into-order.patch
+Patch0021:     0021-build-Add-NULL-as-a-convenient-list-terminator.patch
+Patch0022:     0022-Move-virt-filesystems-virt-log-virt-ls-virt-tail-to-.patch
+Patch0023:     0023-filesystems-Optionally-display-filesystem-version.patch
+Patch0024:     0024-Update-common-submodule.patch
+Patch0025:     0025-Update-common-submodule.patch
+Patch0026:     0026-Update-common-submodule.patch
+Patch0027:     0027-common-update-submodule.patch
+Patch0028:     0028-common-update-submodule.patch
+Patch0029:     0029-virt-builder-document-Windows-firstboot-exit-code-be.patch
+Patch0030:     0030-virt-builder-document-exit-code-250-for-Windows-firs.patch
+Patch0031:     0031-common-update-submodule.patch
+Patch0032:     0032-sysprep-Remove-documentation-about-copying-and-cloni.patch
+Patch0033:     0033-sysprep-Improve-synopsis-section.patch
+Patch0034:     0034-sysprep-Rework-documentation.patch
+Patch0035:     0035-customize-sysprep-Move-firstboot-docs-from-sysprep-c.patch
+Patch0036:     0036-builder-customize-Combine-and-rework-firstboot-docum.patch
+Patch0037:     0037-customize-Document-location-of-Windows-sentinel-file.patch
+Patch0038:     0038-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
+Patch0039:     0039-RHEL-builder-Disable-opensuse-repository.patch
 
 # Basic build requirements.
 BuildRequires: autoconf, automake, libtool, gettext-devel
 BuildRequires: gcc, gcc-c++
 BuildRequires: make
 BuildRequires: glibc-utils
-BuildRequires: libguestfs-devel >= 1:1.58.1-2
+BuildRequires: libguestfs-devel >= 1:1.58.1-6
 BuildRequires: libguestfs-xfs
 BuildRequires: perl(Pod::Simple)
 BuildRequires: perl(Pod::Man)
@@ -123,7 +137,7 @@ BuildRequires: gnupg2
 %endif
 
 # Ensure a minimum version of libguestfs is installed.
-Requires:      libguestfs%{?_isa} >= 1:1.58.1-2
+Requires:      libguestfs%{?_isa} >= 1:1.58.1-6
 
 # For virt-builder:
 Requires:      curl
@@ -421,7 +435,18 @@ end
 
 
 %changelog
-* Wed Feb 05 2026 Richard W.M. Jones <rjones@redhat.com> - 1.54.0-9
+* Thu May 07 2026 Richard W.M. Jones <rjones@redhat.com> - 1.54.0-10
+- Fix binary LUKS keys
+  resolves: RHEL-174518
+- Windows firstboot: Add exit code 250 to skip reboots
+  Rework documentation for firstboot feature
+  resolves: RHEL-174517
+- Write sentinel file after firstboot scripts finish
+  related: RHEL-161192
+- Fix location of Windows Vista and Windows 2008 Server R1 drivers
+  related: RHEL-174513
+
+* Thu Feb 05 2026 Richard W.M. Jones <rjones@redhat.com> - 1.54.0-9
 - Synchronize spec file with Fedora
 - Fix pnputils after virt-customize --inject-virtio-win
   resolves: RHEL-116537

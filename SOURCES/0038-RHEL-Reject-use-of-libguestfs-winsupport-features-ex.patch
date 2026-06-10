@@ -1,4 +1,4 @@
-From 185264d510814eb1e14c770aa826c82d6a747bb3 Mon Sep 17 00:00:00 2001
+From 2f82e84767555a59108d2467970e13c93e0a5b4b Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Tue, 7 Jul 2015 09:28:03 -0400
 Subject: [PATCH] RHEL: Reject use of libguestfs-winsupport features except for

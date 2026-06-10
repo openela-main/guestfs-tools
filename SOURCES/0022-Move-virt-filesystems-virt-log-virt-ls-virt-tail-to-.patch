@@ -1,4 +1,4 @@
-From fb38dacf4992404401e31535761bbf7f465a10b7 Mon Sep 17 00:00:00 2001
+From 4a1f7d22d35438b73974e293a1f481977c8c8a67 Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Thu, 5 Feb 2026 11:56:40 +0000
 Subject: [PATCH] Move virt-filesystems, virt-log, virt-ls, virt-tail to new

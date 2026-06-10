@@ -1,0 +1,39 @@
+From 0f1e772fcf18fc87fd3f4c98566358963893c715 Mon Sep 17 00:00:00 2001
+From: Srihari Parimi <sparimi@redhat.com>
+Date: Fri, 1 May 2026 15:04:41 +0530
+Subject: [PATCH] virt-builder: document Windows firstboot exit code behavior
+
+In the FIRST BOOT SCRIPTS section of the man page, update the
+Windows-specific documentation to clarify how exit codes are handled.
+
+Specifically, explain that for Windows guests, the firstboot.bat
+script considers any exit code other than 249 as a success. An exit
+code of 249 is treated as a failure, which triggers a retry of the
+script on the next boot.
+
+Fixes: https://redhat.atlassian.net/browse/RHEL-170708
+(cherry picked from commit da6500b696d2c8d7614adb68a307651fe84663d6)
+---
+ builder/virt-builder.pod | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/builder/virt-builder.pod b/builder/virt-builder.pod
+index f043939ca..59dd197f0 100644
+--- a/builder/virt-builder.pod
++++ b/builder/virt-builder.pod
+@@ -873,6 +873,15 @@ F<rhsrvany.exe> or F<pvvxsvc.exe> is copied from the location pointed to by the
+ C<VIRT_TOOLS_DATA_DIR> environment variable; if not set, a compiled-in
+ default will be used (something like F</usr/share/virt-tools>).
+ 
++On Windows guests, firstboot scripts are executed by a dedicated
++C<firstboot.bat> script which manages the execution flow.
++
++This script monitors the exit code of each firstboot task. Any exit
++code other than B<249> is considered a success, and the script moves
++on to the next task. If a script returns B<249>, it is treated as a 
++failure, and the system will attempt to run that script again on the
++next boot.
++
+ The output of the first boot scripts is available in the guest as
+ F<C:\Program Files\Guestfs\Firstboot\log.txt>.
+ 

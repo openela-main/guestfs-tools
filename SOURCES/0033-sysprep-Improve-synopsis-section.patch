@@ -1,0 +1,39 @@
+From c7e355b2abfaa0a29ce9bfaeab8883e2553cbee1 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 5 May 2026 12:11:31 +0100
+Subject: [PATCH] sysprep: Improve synopsis section
+
+Expand the synopsis with more usage information.  We cannot list all
+the options here (eg. the customize options) because we don't
+auto-generate that.
+
+(cherry picked from commit e2b43bad4dc0176d2d43694b28b3d78e8fdcebc7)
+---
+ sysprep/virt-sysprep.pod | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/sysprep/virt-sysprep.pod b/sysprep/virt-sysprep.pod
+index 6b913ad70..799764c8e 100644
+--- a/sysprep/virt-sysprep.pod
++++ b/sysprep/virt-sysprep.pod
+@@ -4,9 +4,18 @@ virt-sysprep - Reset, unconfigure or customize a virtual machine so clones can b
+ 
+ =head1 SYNOPSIS
+ 
+- virt-sysprep [--options] -d domname
++ virt-sysprep [--colors] [--colours] [-c URI] [--connect URI]
++    [-n] [--dry-run] [--enable OPERATIONS] [--operations OPERATIONS]
++    [--echo-keys] [--format raw|qcow2] [--key SELECTOR]
++    [--keys-from-stdin] [--mount-options] [-q] [--quiet]
++    [--network] [--no-network] [-v] [--verbose] [--wrap] [-x]
++    -d domname | -a disk.img [-a disk.img ...]
+ 
+- virt-sysprep [--options] -a disk.img [-a disk.img ...]
++  virt-sysprep --list-operations
++
++  virt-sysprep --version
++
++  virt-sysprep -V
+ 
+ =head1 DESCRIPTION
+ 

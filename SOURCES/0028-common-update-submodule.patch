@@ -1,0 +1,483 @@
+From ff7a1b942a667e3cfa5f382a543d775f6c3c8e9b Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 28 Apr 2026 16:57:48 +0100
+Subject: [PATCH] common: update submodule
+
+  Richard W.M. Jones (5):
+      mldrivers/firmware.ml: Ignore CHS geometry error from parted
+      utils: Add read_whole_file function
+      options/keys.c: When reading key from user, prefix with "text:"
+      options/keys.c: When using --key <dev>:key:<string>, prefix with "text:"
+      options/keys.c: When reading the key from a file, encode it with base64
+
+  Srihari Parimi (2):
+      mltools: add prefix to debug () output
+      mltools: for external commands include function name in debug() output
+
+  Susant Sahani (1):
+      smp: respect cgroup v2 CPU limits for appliance SMP
+
+Also this now requires libguestfs >= 1.59.7 because we rely on text:
+and base64: prefixes in LUKS functions.
+
+Fixes: https://redhat.atlassian.net/browse/RHEL-171896
+
+Cherry picked from commit 08afa63ea1541f5e9711d1c8be3b5806c226d539.
+For RHEL 10.2, adjust minimum libguestfs version to match.
+---
+ common                  | 2 +-
+ m4/guestfs-libraries.m4 | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+Submodule common 0948fc94a..cf2e12078:
+diff --git a/common/mldrivers/firmware.ml b/common/mldrivers/firmware.ml
+index ee0a7cafe..6698b0736 100644
+--- a/common/mldrivers/firmware.ml
++++ b/common/mldrivers/firmware.ml
+@@ -18,6 +18,7 @@
+ 
+ open Printf
+ 
++open Std_utils
+ open Tools_utils
+ 
+ module G = Guestfs
+@@ -28,12 +29,22 @@ type i_firmware =
+ 
+ let detect_firmware g =
+   let parttype_is_gpt dev =
+-    try g#part_get_parttype dev = "gpt"
+-    with G.Error msg as exn ->
+-         (* If it's _not_ "unrecognised disk label" then re-raise it. *)
+-         if g#last_errno () <> G.Errno.errno_EINVAL then raise exn;
+-         debug "%s (ignored)" msg;
+-         false
++    try
++      g#part_get_parttype dev = "gpt"
++    with
++    | G.Error msg when String.find msg "CHS geometry" >= 0 ->
++       (* Parted has poor handling of "sun" partition types, always
++        * issuing a warning because the CHS doesn't match the physical
++        * geometry.  Ignore this as we don't care about it in this
++        * function (RHEL-165220).
++        *)
++       debug "%s (ignored)" msg;
++       false
++    | G.Error msg as exn ->
++       (* If it's _not_ "unrecognised disk label" then re-raise it. *)
++       if g#last_errno () <> G.Errno.errno_EINVAL then raise exn;
++       debug "%s (ignored)" msg;
++       false
+   in
+   let accumulate_partition (esp_parts, bboot) part =
+     let dev = g#part_to_dev part in
+diff --git a/common/mltools/tools_utils.ml b/common/mltools/tools_utils.ml
+index 330ca3d00..b1938b5db 100644
+--- a/common/mltools/tools_utils.ml
++++ b/common/mltools/tools_utils.ml
+@@ -207,7 +207,10 @@ let info fs =
+ 
+ (* Print a debug message. *)
+ let debug fs =
+-  let display str = if verbose () then prerr_endline str in
++  let display str =
++    if verbose () then
++      prerr_endline (sprintf "%s: debug: %s" !prog str)
++  in
+   ksprintf display fs
+ 
+ (* Common function to create a new Guestfs handle, with common options
+@@ -442,7 +445,7 @@ let external_command_failed help cmd reason =
+ (* Run an external command, slurp up the output as a list of lines. *)
+ let external_command ?(echo_cmd = true) ?help cmd =
+   if echo_cmd then
+-    debug "%s" cmd;
++    debug "external_command: %s" cmd;
+   let chan = Unix.open_process_in cmd in
+   let lines = ref [] in
+   (try while true do lines := input_line chan :: !lines done
+@@ -517,7 +520,7 @@ and do_run ?(echo_cmd = true) ?help ?stdout_fd ?stderr_fd args =
+     let outfd = get_fd Unix.stdout stdout_fd in
+     let errfd = get_fd Unix.stderr stderr_fd in
+     if echo_cmd then
+-      debug "%s" (stringify_args args);
++      debug "run_command: %s" (stringify_args args);
+     let pid = Unix.create_process app (Array.of_list args) Unix.stdin
+                 outfd errfd in
+     Either (pid, app, stdout_fd, stderr_fd)
+@@ -544,7 +547,7 @@ and do_teardown help app outfd errfd exitstat =
+ 
+ let shell_command ?(echo_cmd = true) cmd =
+   if echo_cmd then
+-    debug "%s" cmd;
++    debug "shell_command: %s" cmd;
+   Sys.command cmd
+ 
+ (* Run uuidgen to return a random UUID. *)
+diff --git a/common/mlutils/unix_utils.ml b/common/mlutils/unix_utils.ml
+index 5898cbec7..9d7e11a65 100644
+--- a/common/mlutils/unix_utils.ml
++++ b/common/mlutils/unix_utils.ml
+@@ -89,3 +89,28 @@ module Sysconf = struct
+   external nr_processors_online : unit -> int =
+     "guestfs_int_mllib_sysconf_nr_processors_online" [@@noalloc]
+ end
++
++module Cgroup = struct
++  let v2_cpus () =
++    let file = "/sys/fs/cgroup/cpu.max" in
++    if Sys.file_exists file then
++      try
++        let line = read_first_line_from_file file in
++        if String.starts_with ~prefix:"max" line then
++          None
++        else
++          let quota, period =
++            Scanf.sscanf line "%Ld %Ld" (fun q p -> (q, p)) in
++          if period > 0L then
++            Some (max 1 (Int64.to_int (Int64.div quota period)))
++          else None
++      with
++      | Scanf.Scan_failure _ | Failure _ | End_of_file -> None
++    else
++      None
++
++  let nr_cpus_available () =
++    match v2_cpus () with
++    | Some cpus -> cpus
++    | None -> Sysconf.nr_processors_online ()
++end
+diff --git a/common/mlutils/unix_utils.mli b/common/mlutils/unix_utils.mli
+index aead4df21..cb4f0426e 100644
+--- a/common/mlutils/unix_utils.mli
++++ b/common/mlutils/unix_utils.mli
+@@ -130,3 +130,21 @@ module Sysconf : sig
+       Note this never fails.  In case we cannot get the number of
+       cores it returns 1. *)
+ end
++
++module Cgroup : sig
++  (** Functions to read CPU limits from cgroup filesystems. *)
++
++  val v2_cpus : unit -> int option
++  (** [v2_cpus ()] reads the cgroup v2 CPU quota from
++      [/sys/fs/cgroup/cpu.max] and returns the number of CPUs
++      allocated (quota / period), or [None] if the file does not
++      exist, the quota is "max" (unlimited), or the file cannot
++      be parsed.  The kernel stores quota and period as [long]
++      values in microseconds, so we parse them as [Int64]. *)
++
++  val nr_cpus_available : unit -> int
++  (** [nr_cpus_available ()] returns the number of CPUs available,
++      taking into account cgroup v2 CPU limits.
++      Falls back to {!Sysconf.nr_processors_online} if no cgroup
++      limits are set. *)
++end
+diff --git a/common/options/keys.c b/common/options/keys.c
+index b8f19cebf..432e26dc8 100644
+--- a/common/options/keys.c
++++ b/common/options/keys.c
+@@ -37,17 +37,23 @@
+  * Read a passphrase ('Key') from F</dev/tty> with echo off.
+  *
+  * The caller (F<fish/cmds.c>) will call free on the string
+- * afterwards.  Based on the code in cryptsetup file F<lib/utils.c>.
++ * afterwards.
++ *
++ * The entered string is prefixed with "text:..." to avoid ambiguity
++ * (with libguestfs >= 1.60).  Base64 encoding cannot be used here.
++ *
++ * Based on the code in cryptsetup file F<lib/utils.c>.
+  */
+ char *
+ read_key (const char *param)
+ {
+   FILE *infp, *outfp;
+   struct termios orig, temp;
++  CLEANUP_FREE char *key = NULL;
++  size_t keysize = 0;
+   char *ret = NULL;
+   int tty;
+   int tcset = 0;
+-  size_t allocsize = 0;
+   ssize_t len;
+ 
+   /* Read and write to /dev/tty if available. */
+@@ -75,17 +81,21 @@ read_key (const char *param)
+     }
+   }
+ 
+-  len = getline (&ret, &allocsize, infp);
++  len = getline (&key, &keysize, infp);
+   if (len == -1) {
+     perror ("getline");
+-    free (ret);
+-    ret = NULL;
+     goto error;
+   }
+ 
+   /* Remove the terminating \n if there is one. */
+-  if (len > 0 && ret[len-1] == '\n')
+-    ret[len-1] = '\0';
++  if (len > 0 && key[len-1] == '\n')
++    key[len-1] = '\0';
++
++  /* Prefix with "text:". */
++  if (asprintf (&ret, "text:%s", key) == -1) {
++    perror ("asprintf");
++    goto error;
++  }
+ 
+  error:
+   /* Restore echo, close file descriptor. */
+@@ -100,27 +110,60 @@ read_key (const char *param)
+   return ret;
+ }
+ 
++/* Read a key from a file and base64 encode it, returning "base64:..." */
+ static char *
+-read_first_line_from_file (const char *filename)
++read_key_and_base64_encode (const char *filename)
+ {
+-  CLEANUP_FCLOSE FILE *fp = NULL;
+-  char *ret = NULL;
+-  size_t allocsize = 0;
+-  ssize_t len;
++  CLEANUP_FREE char *inp = NULL;
++  char *out;
++  size_t inplen, outlen, i, j;
+ 
+-  fp = fopen (filename, "r");
+-  if (!fp)
+-    error (EXIT_FAILURE, errno, "fopen: %s", filename);
++  if (read_whole_file (filename, &inp, &inplen) == -1)
++    error (EXIT_FAILURE, 0, "read_key_and_base64_encode: read_whole_file: %s",
++           filename);
+ 
+-  len = getline (&ret, &allocsize, fp);
+-  if (len == -1)
+-    error (EXIT_FAILURE, errno, "getline: %s", filename);
++  /* From https://stackoverflow.com/a/6782480 */
++  static char encoding_table[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
++                                  'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
++                                  'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
++                                  'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
++                                  'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
++                                  'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
++                                  'w', 'x', 'y', 'z', '0', '1', '2', '3',
++                                  '4', '5', '6', '7', '8', '9', '+', '/'};
++  static int mod_table[] = {0, 2, 1};
+ 
+-  /* Remove the terminating \n if there is one. */
+-  if (len > 0 && ret[len-1] == '\n')
+-    ret[len-1] = '\0';
++  outlen = 4 * ((inplen + 2) / 3);
++  out = malloc (outlen + 7 + 1);
++  if (!out)
++    error (EXIT_FAILURE, errno, "read_key_and_base64_encode: %s: malloc",
++           filename);
+ 
+-  return ret;
++  /* Add prefix and NUL-termination, then adjust 'out' to make the
++   * rest of the code simpler.
++   */
++  memcpy (out, "base64:", 7);
++  out[7 + outlen] = '\0';
++  out += 7;
++
++  for (i = 0, j = 0; i < inplen;) {
++    uint32_t octet_a = i < inplen ? (unsigned char) inp[i++] : 0;
++    uint32_t octet_b = i < inplen ? (unsigned char) inp[i++] : 0;
++    uint32_t octet_c = i < inplen ? (unsigned char) inp[i++] : 0;
++
++    uint32_t triple = (octet_a << 0x10) + (octet_b << 0x08) + octet_c;
++
++    assert (j <= outlen-4);
++    out[j++] = encoding_table[(triple >> 3 * 6) & 0x3F];
++    out[j++] = encoding_table[(triple >> 2 * 6) & 0x3F];
++    out[j++] = encoding_table[(triple >> 1 * 6) & 0x3F];
++    out[j++] = encoding_table[(triple >> 0 * 6) & 0x3F];
++  }
++
++  for (i = 0; i < mod_table[inplen % 3]; i++)
++    out[outlen - 1 - i] = '=';
++
++  return out - 7 /* see above */;
+ }
+ 
+ /* Return the key(s) matching this particular device from the
+@@ -164,15 +207,14 @@ get_keys (struct key_store *ks, const char *device, const char *uuid,
+ 
+       switch (key->type) {
+       case key_string:
+-        s = strdup (key->string.s);
+-        if (!s)
+-          error (EXIT_FAILURE, errno, "strdup");
++        if (asprintf (&s, "text:%s", key->string.s) == -1)
++          error (EXIT_FAILURE, errno, "asprintf");
+         match->clevis = false;
+         match->passphrase = s;
+         ++match;
+         break;
+       case key_file:
+-        s = read_first_line_from_file (key->file.name);
++        s = read_key_and_base64_encode (key->file.name);
+         match->clevis = false;
+         match->passphrase = s;
+         ++match;
+diff --git a/common/utils/Makefile.am b/common/utils/Makefile.am
+index 25c6100b2..f328dcadf 100644
+--- a/common/utils/Makefile.am
++++ b/common/utils/Makefile.am
+@@ -30,6 +30,7 @@ libutils_la_SOURCES = \
+ 	libxml2-writer-macros.h \
+ 	pcre2-cleanups.c \
+ 	stringlists-utils.c \
++	whole-file.c \
+ 	utils.c
+ libutils_la_CPPFLAGS = \
+ 	-DGUESTFS_NO_DEPRECATED=1 \
+diff --git a/common/utils/guestfs-utils.h b/common/utils/guestfs-utils.h
+index e861e7db5..a8bd9ac2c 100644
+--- a/common/utils/guestfs-utils.h
++++ b/common/utils/guestfs-utils.h
+@@ -113,4 +113,8 @@ extern const char *guestfs_int_strerror (int errnum, char *buf, size_t buflen);
+ /* environ.c */
+ extern char **guestfs_int_copy_environ (char **env, ...);
+ 
++/* whole-file.c */
++extern int read_whole_file (const char *filename,
++                            char **data_r, size_t *size_r);
++
+ #endif /* GUESTFS_UTILS_H_ */
+diff --git a/common/utils/whole-file.c b/common/utils/whole-file.c
+new file mode 100644
+index 000000000..a896e0241
+--- /dev/null
++++ b/common/utils/whole-file.c
+@@ -0,0 +1,111 @@
++/* libguestfs
++ * Copyright (C) 2011-2026 Red Hat Inc.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++ */
++
++#include <config.h>
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <unistd.h>
++#include <fcntl.h>
++#include <sys/stat.h>
++#include <libintl.h>
++
++#include "guestfs-utils.h"
++
++/**
++ * Read the whole file C<filename> into a memory buffer.
++ *
++ * The memory buffer is initialized and returned in C<data_r>.  The
++ * size of the file in bytes is returned in C<size_r>.  The return
++ * buffer must be freed by the caller.
++ *
++ * On error this prints an error on C<stderr> and returns -1.  Unlike
++ * the similar C<guestfs_int_read_whole_file> this does not use the
++ * libguestfs handle or call C<error()>.
++ *
++ * For the convenience of callers, the returned buffer is
++ * NUL-terminated (the NUL is not included in the size).
++ *
++ * The file must be a B<regular>, B<local>, B<trusted> file.  In
++ * particular, do not use this function to read files that might be
++ * under control of an untrusted user since that will lead to a
++ * denial-of-service attack.
++ */
++int
++read_whole_file (const char *filename, char **data_r, size_t *size_r)
++{
++  int fd;
++  char *data;
++  off_t size;
++  off_t n;
++  ssize_t r;
++  struct stat statbuf;
++
++  fd = open (filename, O_RDONLY|O_CLOEXEC);
++  if (fd == -1) {
++    perror (filename);
++    return -1;
++  }
++
++  if (fstat (fd, &statbuf) == -1) {
++    perror (filename);
++    close (fd);
++    return -1;
++  }
++
++  size = statbuf.st_size;
++  data = malloc (size + 1);
++  if (data == NULL) {
++    perror ("malloc");
++    close (fd);
++    return -1;
++  }
++
++  n = 0;
++  while (n < size) {
++    r = read (fd, &data[n], size - n);
++    if (r == -1) {
++      perror (filename);
++      free (data);
++      close (fd);
++      return -1;
++    }
++    if (r == 0) {
++      fprintf (stderr, "%s: unexpected end of input", filename);
++      free (data);
++      close (fd);
++      return -1;
++    }
++    n += r;
++  }
++
++  if (close (fd) == -1) {
++    perror (filename);
++    free (data);
++    return -1;
++  }
++
++  /* For convenience of callers, \0-terminate the data. */
++  data[size] = '\0';
++
++  *data_r = data;
++  if (size_r != NULL)
++    *size_r = size;
++
++  return 0;
++}
+diff --git a/m4/guestfs-libraries.m4 b/m4/guestfs-libraries.m4
+index 02f2281f8..9b643650d 100644
+--- a/m4/guestfs-libraries.m4
++++ b/m4/guestfs-libraries.m4
+@@ -22,7 +22,8 @@ dnl
+ dnl We need libguestfs 1.57.1 for guestfs_setfiles.
+ dnl We need libguestfs 1.57.6 for guestfs_inspect_get_applications2 app2_class.
+ dnl We need libguestfs 1.57.6 for guestfs_inspect_get_windows_group_policy
+-PKG_CHECK_MODULES([LIBGUESTFS], [libguestfs >= 1.57.6])
++dnl We need libguestfs 1.58.1-6.el10 for text: and base64: prefix in LUKS funcs.
++PKG_CHECK_MODULES([LIBGUESTFS], [libguestfs >= 1.58.1])
+ printf "libguestfs version is "; $PKG_CONFIG --modversion libguestfs
+ 
+ dnl Test if it's GNU or XSI strerror_r.

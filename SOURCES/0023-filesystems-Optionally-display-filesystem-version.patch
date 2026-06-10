@@ -1,4 +1,4 @@
-From fb60205807bf7d8ccd7847abdfd532ed54f6614a Mon Sep 17 00:00:00 2001
+From 52a921e1276748f9de7115078fd2999e750299c0 Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Thu, 5 Feb 2026 13:17:38 +0000
 Subject: [PATCH] filesystems: Optionally display filesystem version

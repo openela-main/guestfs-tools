@@ -1,4 +1,4 @@
-From 6c1ea9c15b78274ea0907aa6a1214c294101aa6a Mon Sep 17 00:00:00 2001
+From d1ca20bde34a4085f3ec7e3e418d01bc4deb2698 Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Mon, 26 Jan 2026 15:26:23 +0000
 Subject: [PATCH] inspector: For xfs, try to find and print the filesystem

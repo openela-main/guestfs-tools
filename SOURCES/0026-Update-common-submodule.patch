@@ -1,0 +1,638 @@
+From 001cb3dddd4ddc218d02558a46070545bbca3c98 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Mon, 16 Mar 2026 09:38:37 +0000
+Subject: [PATCH] Update common submodule
+
+  Cole Robinson (2):
+      virtio-win: Install blnsvr.exe to C:\Windows\Drivers\VirtIO
+      build: mark some ocaml commands with $(AM_V_GEN)
+
+  Richard W.M. Jones (7):
+      mlpcre: Add optional PCRE_ANCHORED flag when compiling expressions
+      mlstdutils: Export List.assoc_opt
+      mlcustomize/firstboot.ml: Be more careful about quoting
+      mlcustomize: Create a sentinel file when firstboot completes
+      mlutils/c_utils-c.c: Throw Unix_error on failure
+      Use caml_unix_error instead of unix_error
+      mlutils/unix_utils.ml: statvfs_is_network_filesystem should not be noalloc
+
+  grass-lu (1):
+      Add support for Kylin, NeoKylin and Anolis Linux
+
+  shivanayak (5):
+      common: fix FILE stream leak in worker_thread on guestfs_create failure (#27)
+      options: fix memory leak in read_key on getline failure (#30)
+      edit: check WIFEXITED before WEXITSTATUS in edit_file_editor and edit_file_perl (#31)
+      mlutils: fix pattern leak in mkdtemp wrapper on failure
+      qemuopts: check for write errors in qemuopts_to_channel and qemuopts_to_config_channel (#33)
+
+(cherry picked from commit a735b6b45de2afaddd4d4287cd666a5afc9ec964)
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common cf663a835..c8e64b3ff:
+diff --git a/common/edit/file-edit.c b/common/edit/file-edit.c
+index ef56ed13d..a10d61c99 100644
+--- a/common/edit/file-edit.c
++++ b/common/edit/file-edit.c
+@@ -119,7 +119,7 @@ edit_file_editor (guestfs_h *g, const char *filename, const char *editor,
+     fprintf (stderr, "%s\n", cmd);
+ 
+   r = system (cmd);
+-  if (r == -1 || WEXITSTATUS (r) != 0) {
++  if (r == -1 || !WIFEXITED (r) || WEXITSTATUS (r) != 0) {
+     perror (cmd);
+     return -1;
+   }
+@@ -194,7 +194,7 @@ edit_file_perl (guestfs_h *g, const char *filename, const char *perl_expr,
+     fprintf (stderr, "%s\n", cmd);
+ 
+   r = system (cmd);
+-  if (r == -1 || WEXITSTATUS (r) != 0)
++  if (r == -1 || !WIFEXITED (r) || WEXITSTATUS (r) != 0)
+     return -1;
+ 
+   if (rename (outfile, tmpfilename) == -1) {
+diff --git a/common/mlcustomize/Makefile.am b/common/mlcustomize/Makefile.am
+index 351524c80..3bdff2a63 100644
+--- a/common/mlcustomize/Makefile.am
++++ b/common/mlcustomize/Makefile.am
+@@ -142,7 +142,7 @@ endif
+ libmlcustomize_a_DEPENDENCIES = $(OBJECTS)
+ 
+ $(MLCUSTOMIZE_CMA): $(OBJECTS) libmlcustomize.a
+-	$(OCAMLFIND) mklib $(OCAMLPACKAGES) \
++	$(AM_V_GEN) $(OCAMLFIND) mklib $(OCAMLPACKAGES) \
+ 	    $(OBJECTS) $(libmlcustomize_a_OBJECTS) -o mlcustomize
+ 
+ # Tests.
+diff --git a/common/mlcustomize/crypt-c.c b/common/mlcustomize/crypt-c.c
+index e358018cd..e1bc740d1 100644
+--- a/common/mlcustomize/crypt-c.c
++++ b/common/mlcustomize/crypt-c.c
+@@ -47,7 +47,7 @@ virt_customize_crypt (value keyv, value saltv)
+    */
+   r = crypt (String_val (keyv), String_val (saltv));
+   if (r == NULL)
+-    unix_error (errno, (char *) "crypt", Nothing);
++    caml_unix_error (errno, (char *) "crypt", Nothing);
+   rv = caml_copy_string (r);
+ 
+   CAMLreturn (rv);
+diff --git a/common/mlcustomize/firstboot.ml b/common/mlcustomize/firstboot.ml
+index f29884c88..543e98fb1 100644
+--- a/common/mlcustomize/firstboot.ml
++++ b/common/mlcustomize/firstboot.ml
+@@ -151,7 +151,7 @@ WantedBy=%s
+   and install_sysvinit_service g root distro major =
+     match distro with
+     | "fedora"|"rhel"|"centos"|"scientificlinux"|"oraclelinux"|"rocky"|
+-        "redhat-based"|"openeuler" ->
++        "redhat-based"|"openeuler"|"kylin"|"neokylin"|"anolis" ->
+       install_sysvinit_redhat g
+     | "opensuse"|"sles"|"suse-based" ->
+       install_sysvinit_suse g
+@@ -271,6 +271,9 @@ module Windows = struct
+     (* Create a directory for firstboot scripts in the guest. *)
+     g#mkdir_p (firstboot_dir // "scripts");
+ 
++    (* Remove the sentinel file if it exists from a previous run. *)
++    g#rm_f (firstboot_dir // "complete");
++
+     (* Copy pvvxsvc or rhsrvany to the guest. *)
+     g#upload (virt_tools_data_dir () // srvany) (firstboot_dir // srvany);
+ 
+@@ -284,11 +287,11 @@ module Windows = struct
+     let firstboot_script = sprintf {|@echo off
+ 
+ setlocal EnableDelayedExpansion
+-set firstboot=%s
+-set log=%%firstboot%%\log.txt
++set "firstboot=%s"
++set "log=%%firstboot%%\log.txt"
+ 
+-set scripts=%%firstboot%%\scripts
+-set scripts_done=%%firstboot%%\scripts-done
++set "scripts=%%firstboot%%\scripts"
++set "scripts_done=%%firstboot%%\scripts-done"
+ 
+ call :main >> "%%log%%" 2>&1
+ exit /b
+@@ -327,6 +330,10 @@ for %%%%f in ("%%scripts%%"\*.bat) do (
+ )
+ 
+ :: Fallthrough here if there are no scripts.
++
++:: Touch a sentinel file to say we have finished.
++type nul > "%%firstboot%%\complete"
++
+ echo uninstalling firstboot service
+ "%%firstboot%%\%s" -s firstboot uninstall
+ |} firstboot_dir_win srvany in
+diff --git a/common/mlcustomize/hostname.ml b/common/mlcustomize/hostname.ml
+index d4a13d4d4..66f59a322 100644
+--- a/common/mlcustomize/hostname.ml
++++ b/common/mlcustomize/hostname.ml
+@@ -37,7 +37,7 @@ let rec set_hostname (g : Guestfs.guestfs) root hostname =
+     true
+ 
+   | "linux", ("rhel"|"centos"|"scientificlinux"|"oraclelinux"|"rocky"|
+-              "redhat-based"|"openeuler"), v
++              "redhat-based"|"openeuler"|"kylin"|"neokylin"|"anolis"), v
+     when v >= 7 ->
+     update_etc_hostname g hostname;
+     update_etc_machine_info g hostname;
+@@ -50,7 +50,7 @@ let rec set_hostname (g : Guestfs.guestfs) root hostname =
+     true
+ 
+   | "linux", ("fedora"|"rhel"|"centos"|"scientificlinux"|"oraclelinux"|
+-              "redhat-based"|"openeuler"), _ ->
++              "redhat-based"|"openeuler"|"kylin"|"neokylin"|"anolis"), _ ->
+     replace_line_in_file g "/etc/sysconfig/network" "HOSTNAME" hostname;
+     true
+ 
+diff --git a/common/mlcustomize/inject_virtio_win.ml b/common/mlcustomize/inject_virtio_win.ml
+index 114df0641..a29380806 100644
+--- a/common/mlcustomize/inject_virtio_win.ml
++++ b/common/mlcustomize/inject_virtio_win.ml
+@@ -254,13 +254,10 @@ and inject_qemu_ga ({ g; root } as t) =
+ 
+ and inject_blnsvr ({ g; root } as t) =
+   (* Copy the files to the guest. *)
+-  let dir, dir_win = Firstboot.firstboot_dir g root in
+-  let dir_win = Option.value dir_win ~default:dir in
+-  let tempdir = sprintf "%s/Temp" dir in
+-  let tempdir_win = sprintf "%s\\Temp" dir_win in
+-  g#mkdir_p tempdir;
++  let driverdir = sprintf "%s/Drivers/VirtIO" t.i_windows_systemroot in
++  g#mkdir_p driverdir;
+ 
+-  let files = copy_blnsvr t tempdir in
++  let files = copy_blnsvr t driverdir in
+   match files with
+   | [] -> false (* Didn't find or install anything. *)
+ 
+@@ -268,7 +265,7 @@ and inject_blnsvr ({ g; root } as t) =
+    * drivers/by-driver).  Pick the first.
+    *)
+   | blnsvr :: _ ->
+-     configure_blnsvr t tempdir_win blnsvr;
++     configure_blnsvr t driverdir blnsvr;
+      true
+ 
+ and add_guestor_to_registry t ((g, root) as reg) drv_name drv_pciid =
+@@ -570,9 +567,9 @@ and configure_qemu_ga t tempdir_win files =
+ 
+   Firstboot.add_firstboot_powershell t.g t.root "install-qemu-ga" !script
+ 
+-and configure_blnsvr t tempdir_win blnsvr =
++and configure_blnsvr t driverdir blnsvr =
+   let cmd = sprintf "\
+                      @echo off\n\
+                      echo Installing %s\n\
+-                     \"%s\\%s\" -i\n" blnsvr tempdir_win blnsvr in
++                     \"%s\\%s\" -i\n" blnsvr driverdir blnsvr in
+   Firstboot.add_firstboot_script t.g t.root "install-blnsvr" cmd
+diff --git a/common/mlcustomize/password.ml b/common/mlcustomize/password.ml
+index 62f80b05f..8dba0358a 100644
+--- a/common/mlcustomize/password.ml
++++ b/common/mlcustomize/password.ml
+@@ -190,6 +190,7 @@ and default_crypto g root =
+   (* Rolling distributions, which hopefully should be updated enough. *)
+   | ("archlinux"|"kalilinux"), _ -> `YESCRYPT
+   | ("voidlinux"|"openeuler"), _ -> `SHA512
++  | ("kylin"|"neokylin"|"anolis"), _ -> `SHA512
+ 
+   | _, _ ->
+     let minor = g#inspect_get_minor_version root in
+diff --git a/common/mldrivers/Makefile.am b/common/mldrivers/Makefile.am
+index 714fc9f74..aac3da4f1 100644
+--- a/common/mldrivers/Makefile.am
++++ b/common/mldrivers/Makefile.am
+@@ -94,7 +94,7 @@ endif
+ libmldrivers_a_DEPENDENCIES = $(OBJECTS)
+ 
+ $(MLDRIVERS_CMA): $(OBJECTS) libmldrivers.a
+-	$(OCAMLFIND) mklib $(OCAMLPACKAGES) \
++	$(AM_V_GEN) $(OCAMLFIND) mklib $(OCAMLPACKAGES) \
+ 	    $(OBJECTS) $(libmldrivers_a_OBJECTS) -o mldrivers
+ 
+ # OCaml dependencies.
+diff --git a/common/mlgettext/Makefile.am b/common/mlgettext/Makefile.am
+index 712feb11b..275b15fa2 100644
+--- a/common/mlgettext/Makefile.am
++++ b/common/mlgettext/Makefile.am
+@@ -71,11 +71,11 @@ endif
+ libmlgettext_a_DEPENDENCIES = $(OBJECTS)
+ 
+ mlgettext.cma: $(BOBJECTS)
+-	$(OCAMLFIND) ocamlc $(OCAMLPACKAGES) -a $^ -o $@
++	$(AM_V_GEN) $(OCAMLFIND) ocamlc $(OCAMLPACKAGES) -a $^ -o $@
+ 
+ if HAVE_OCAMLOPT
+ mlgettext.cmxa: $(XOBJECTS)
+-	$(OCAMLFIND) ocamlopt $(OCAMLPACKAGES) -a $^ -o $@
++	$(AM_V_GEN) $(OCAMLFIND) ocamlopt $(OCAMLPACKAGES) -a $^ -o $@
+ endif
+ 
+ # Dependencies.
+diff --git a/common/mlpcre/Makefile.am b/common/mlpcre/Makefile.am
+index a1d8b0293..30a60f645 100644
+--- a/common/mlpcre/Makefile.am
++++ b/common/mlpcre/Makefile.am
+@@ -83,7 +83,7 @@ endif
+ libmlpcre_a_DEPENDENCIES = $(OBJECTS)
+ 
+ $(MLPCRE_CMA): $(OBJECTS) libmlpcre.a
+-	$(OCAMLFIND) mklib $(OCAMLPACKAGES) \
++	$(AM_V_GEN) $(OCAMLFIND) mklib $(OCAMLPACKAGES) \
+ 	    $(OBJECTS) $(libmlpcre_a_OBJECTS) -cclib -lpcre2-8 -o mlpcre
+ 
+ # Tests.
+diff --git a/common/mlpcre/PCRE.ml b/common/mlpcre/PCRE.ml
+index 077290ef1..33074af1c 100644
+--- a/common/mlpcre/PCRE.ml
++++ b/common/mlpcre/PCRE.ml
+@@ -22,7 +22,7 @@ exception Error of string * int
+ 
+ type regexp
+ 
+-external compile : ?caseless:bool -> ?dotall:bool -> ?extended:bool -> ?multiline:bool -> string -> regexp = "guestfs_int_pcre_compile"
++external compile : ?anchored:bool -> ?caseless:bool -> ?dotall:bool -> ?extended:bool -> ?multiline:bool -> string -> regexp = "guestfs_int_pcre_compile_byte" "guestfs_int_pcre_compile"
+ external matches : ?offset:int -> regexp -> string -> bool = "guestfs_int_pcre_matches"
+ external sub : int -> string = "guestfs_int_pcre_sub"
+ external subi : int -> int * int = "guestfs_int_pcre_subi"
+diff --git a/common/mlpcre/PCRE.mli b/common/mlpcre/PCRE.mli
+index b69a56ba9..0fdc2bd5f 100644
+--- a/common/mlpcre/PCRE.mli
++++ b/common/mlpcre/PCRE.mli
+@@ -52,11 +52,12 @@ exception Error of string * int
+ type regexp
+ (** The type of a compiled regular expression. *)
+ 
+-val compile : ?caseless:bool -> ?dotall:bool -> ?extended:bool -> ?multiline:bool -> string -> regexp
++val compile : ?anchored:bool -> ?caseless:bool -> ?dotall:bool ->
++              ?extended:bool -> ?multiline:bool -> string -> regexp
+ (** Compile a regular expression.  This can raise {!Error}.
+ 
+-    The flags [?caseless], [?dotall], [?extended], [?multiline]
+-    correspond to the [pcre_compile] flags [PCRE_CASELESS] etc.
++    The flags [?anchored], [?caseless], [?dotall], [?extended], [?multiline]
++    correspond to the [pcre_compile] flags [PCRE_ANCHORED] etc.
+     See pcre2api(3) for details of what they do.
+     All flags default to false. *)
+ 
+diff --git a/common/mlpcre/pcre-c.c b/common/mlpcre/pcre-c.c
+index 3959fd566..11be15775 100644
+--- a/common/mlpcre/pcre-c.c
++++ b/common/mlpcre/pcre-c.c
+@@ -154,11 +154,12 @@ Optint_val (value intv, int defval)
+ }
+ 
+ value
+-guestfs_int_pcre_compile (value caselessv, value dotallv,
+-                          value extendedv, value multilinev,
++guestfs_int_pcre_compile (value anchoredv, value caselessv,
++                          value dotallv,  value extendedv,
++                          value multilinev,
+                           value pattv)
+ {
+-  CAMLparam4 (caselessv, dotallv, extendedv, multilinev);
++  CAMLparam5 (anchoredv, caselessv, dotallv, extendedv, multilinev);
+   CAMLxparam1 (pattv);
+   const char *patt;
+   int options = 0;
+@@ -167,6 +168,8 @@ guestfs_int_pcre_compile (value caselessv, value dotallv,
+   PCRE2_SIZE errnum;
+ 
+   /* Flag parameters are all ‘bool option’, defaulting to false. */
++  if (is_Some_true (anchoredv))
++    options |= PCRE2_ANCHORED;
+   if (is_Some_true (caselessv))
+     options |= PCRE2_CASELESS;
+   if (is_Some_true (dotallv))
+@@ -186,6 +189,14 @@ guestfs_int_pcre_compile (value caselessv, value dotallv,
+   CAMLreturn (Val_regexp (re));
+ }
+ 
++value
++guestfs_int_pcre_compile_byte (value *argv, int argn)
++{
++  assert (argn == 6);
++  return guestfs_int_pcre_compile (argv[0], argv[1], argv[2],
++                                   argv[3], argv[4], argv[5]);
++}
++
+ value
+ guestfs_int_pcre_matches (value offsetv, value rev, value strv)
+ {
+diff --git a/common/mlprogress/Makefile.am b/common/mlprogress/Makefile.am
+index 3f3424e04..134c4ab4c 100644
+--- a/common/mlprogress/Makefile.am
++++ b/common/mlprogress/Makefile.am
+@@ -83,7 +83,7 @@ endif
+ libmlprogress_a_DEPENDENCIES = $(OBJECTS)
+ 
+ $(MLPROGRESS_CMA): $(OBJECTS) libmlprogress.a
+-	$(OCAMLFIND) mklib $(OCAMLPACKAGES) \
++	$(AM_V_GEN) $(OCAMLFIND) mklib $(OCAMLPACKAGES) \
+ 	    $(OBJECTS) $(libmlprogress_a_OBJECTS) \
+ 	    -cclib -lprogress \
+ 	    -o mlprogress
+diff --git a/common/mlstdutils/Makefile.am b/common/mlstdutils/Makefile.am
+index b9632b078..0f881907a 100644
+--- a/common/mlstdutils/Makefile.am
++++ b/common/mlstdutils/Makefile.am
+@@ -84,11 +84,11 @@ endif
+ libmlstdutils_a_DEPENDENCIES = $(OBJECTS)
+ 
+ mlstdutils.cma: $(BOBJECTS)
+-	$(OCAMLFIND) ocamlc $(OCAMLPACKAGES) -a $^ -o $@
++	$(AM_V_GEN) $(OCAMLFIND) ocamlc $(OCAMLPACKAGES) -a $^ -o $@
+ 
+ if HAVE_OCAMLOPT
+ mlstdutils.cmxa: $(XOBJECTS)
+-	$(OCAMLFIND) ocamlopt $(OCAMLPACKAGES) -a $^ -o $@
++	$(AM_V_GEN) $(OCAMLFIND) ocamlopt $(OCAMLPACKAGES) -a $^ -o $@
+ endif
+ 
+ # Tests.
+diff --git a/common/mlstdutils/std_utils.mli b/common/mlstdutils/std_utils.mli
+index 6c1911da8..77cf107ed 100644
+--- a/common/mlstdutils/std_utils.mli
++++ b/common/mlstdutils/std_utils.mli
+@@ -51,6 +51,7 @@ module List : sig
+     val find_all : ('a -> bool) -> 'a list -> 'a list
+     val partition : ('a -> bool) -> 'a list -> 'a list * 'a list
+     val assoc : 'a -> ('a * 'b) list -> 'b
++    val assoc_opt : 'a -> ('a * 'b) list -> 'b option
+     val assq : 'a -> ('a * 'b) list -> 'b
+     val mem_assoc : 'a -> ('a * 'b) list -> bool
+     val mem_assq : 'a -> ('a * 'b) list -> bool
+diff --git a/common/mltools/Makefile.am b/common/mltools/Makefile.am
+index e9e0398c7..44cfbb1b1 100644
+--- a/common/mltools/Makefile.am
++++ b/common/mltools/Makefile.am
+@@ -161,7 +161,7 @@ endif
+ libmltools_a_DEPENDENCIES = $(OBJECTS)
+ 
+ $(MLTOOLS_CMA): $(OBJECTS) libmltools.a
+-	$(OCAMLFIND) mklib $(OCAMLPACKAGES) \
++	$(AM_V_GEN) $(OCAMLFIND) mklib $(OCAMLPACKAGES) \
+ 	    $(OBJECTS) $(libmltools_a_OBJECTS) -o mltools
+ 
+ # Tests.
+diff --git a/common/mltools/tools_utils-c.c b/common/mltools/tools_utils-c.c
+index 4ff42e5d5..21f7469aa 100644
+--- a/common/mltools/tools_utils-c.c
++++ b/common/mltools/tools_utils-c.c
+@@ -126,10 +126,10 @@ guestfs_int_mllib_rfc3339_date_time_string (value unitv)
+   size_t total = 0;
+ 
+   if (clock_gettime (CLOCK_REALTIME, &ts) == -1)
+-    unix_error (errno, (char *) "clock_gettime", Val_unit);
++    caml_unix_error (errno, (char *) "clock_gettime", Val_unit);
+ 
+   if (localtime_r (&ts.tv_sec, &tm) == NULL)
+-    unix_error (errno, (char *) "localtime_r", caml_copy_int64 (ts.tv_sec));
++    caml_unix_error (errno, (char *) "localtime_r", caml_copy_int64 (ts.tv_sec));
+ 
+   /* Sadly strftime does not support nanoseconds, so what we do is:
+    * - stringify everything before the nanoseconds
+@@ -141,17 +141,17 @@ guestfs_int_mllib_rfc3339_date_time_string (value unitv)
+ 
+   ret = strftime (buf, sizeof (buf), "%Y-%m-%dT%H:%M:%S.", &tm);
+   if (ret == 0)
+-    unix_error (errno, (char *) "strftime", Val_unit);
++    caml_unix_error (errno, (char *) "strftime", Val_unit);
+   total += ret;
+ 
+   ret = snprintf (buf + total, sizeof (buf) - total, "%09ld", ts.tv_nsec);
+   if (ret == 0)
+-    unix_error (errno, (char *) "sprintf", caml_copy_int64 (ts.tv_nsec));
++    caml_unix_error (errno, (char *) "sprintf", caml_copy_int64 (ts.tv_nsec));
+   total += ret;
+ 
+   ret = strftime (buf + total, sizeof (buf) - total, "%z", &tm);
+   if (ret == 0)
+-    unix_error (errno, (char *) "strftime", Val_unit);
++    caml_unix_error (errno, (char *) "strftime", Val_unit);
+   total += ret;
+ 
+   /* Move the timezone minutes one character to the right, moving the
+diff --git a/common/mlutils/Makefile.am b/common/mlutils/Makefile.am
+index d52cb9c86..084ce6304 100644
+--- a/common/mlutils/Makefile.am
++++ b/common/mlutils/Makefile.am
+@@ -86,7 +86,7 @@ endif
+ libmlcutils_a_DEPENDENCIES = $(OBJECTS)
+ 
+ $(MLCUTILS_CMA): $(OBJECTS) libmlcutils.a
+-	$(OCAMLFIND) mklib $(OCAMLPACKAGES) \
++	$(AM_V_GEN) $(OCAMLFIND) mklib $(OCAMLPACKAGES) \
+ 	    $(OBJECTS) $(libmlcutils_a_OBJECTS) \
+ 	    -cclib -lutils \
+ 	    -o mlcutils
+diff --git a/common/mlutils/c_utils-c.c b/common/mlutils/c_utils-c.c
+index d9c1a4803..f0e2798f4 100644
+--- a/common/mlutils/c_utils-c.c
++++ b/common/mlutils/c_utils-c.c
+@@ -68,7 +68,7 @@ guestfs_int_mlutils_shell_unquote (value strv)
+ 
+   ret = guestfs_int_shell_unquote (String_val (strv));
+   if (ret == NULL)
+-    unix_error (errno, (char *) "guestfs_int_shell_unquote", Nothing);
++    caml_unix_error (errno, (char *) "guestfs_int_shell_unquote", Nothing);
+ 
+   retv = caml_copy_string (ret);
+   free (ret);
+@@ -101,6 +101,8 @@ guestfs_int_mlutils_full_path (value dirv, value namev)
+     name = String_val (Field (namev, 0));
+ 
+   ret = guestfs_int_full_path (String_val (dirv), name);
++  if (ret == NULL)
++    caml_unix_error (errno, (char *) "guestfs_int_full_path", dirv);
+   rv = caml_copy_string (ret);
+   free (ret);
+ 
+diff --git a/common/mlutils/unix_utils-c.c b/common/mlutils/unix_utils-c.c
+index ee5a37964..28df2c310 100644
+--- a/common/mlutils/unix_utils-c.c
++++ b/common/mlutils/unix_utils-c.c
+@@ -147,7 +147,7 @@ guestfs_int_mllib_fnmatch (value patternv, value strv, value flagsv)
+     /* XXX The fnmatch specification doesn't mention what errors can
+      * be returned by fnmatch.  Assume they are errnos for now.
+      */
+-    unix_error (errno, (char *) "fnmatch", patternv);
++    caml_unix_error (errno, (char *) "fnmatch", patternv);
+   }
+ }
+ 
+@@ -180,16 +180,16 @@ guestfs_int_mllib_fsync_file (value filenamev)
+   /* Note to do fsync you have to open for write. */
+   fd = open (filename, O_RDWR);
+   if (fd == -1)
+-    unix_error (errno, (char *) "open", filenamev);
++    caml_unix_error (errno, (char *) "open", filenamev);
+ 
+   if (fsync (fd) == -1) {
+     err = errno;
+     close (fd);
+-    unix_error (err, (char *) "fsync", filenamev);
++    caml_unix_error (err, (char *) "fsync", filenamev);
+   }
+ 
+   if (close (fd) == -1)
+-    unix_error (errno, (char *) "close", filenamev);
++    caml_unix_error (errno, (char *) "close", filenamev);
+ 
+   CAMLreturn (Val_unit);
+ }
+@@ -203,11 +203,14 @@ guestfs_int_mllib_mkdtemp (value val_pattern)
+ 
+   pattern = strdup (String_val (val_pattern));
+   if (pattern == NULL)
+-    unix_error (errno, (char *) "strdup", val_pattern);
++    caml_unix_error (errno, (char *) "strdup", val_pattern);
+ 
+   ret = mkdtemp (pattern);
+-  if (ret == NULL)
+-    unix_error (errno, (char *) "mkdtemp", val_pattern);
++  if (ret == NULL) {
++    int err = errno;
++    free (pattern);
++    caml_unix_error (err, (char *) "mkdtemp", val_pattern);
++  }
+ 
+   rv = caml_copy_string (ret);
+   free (pattern);
+@@ -224,7 +227,7 @@ guestfs_int_mllib_realpath (value pathv)
+ 
+   r = realpath (String_val (pathv), NULL);
+   if (r == NULL)
+-    unix_error (errno, (char *) "realpath", pathv);
++    caml_unix_error (errno, (char *) "realpath", pathv);
+ 
+   rv = caml_copy_string (r);
+   free (r);
+@@ -252,7 +255,7 @@ guestfs_int_mllib_statvfs_statvfs (value pathv)
+   struct statvfs buf;
+ 
+   if (statvfs (String_val (pathv), &buf) == -1)
+-    unix_error (errno, (char *) "statvfs", pathv);
++    caml_unix_error (errno, (char *) "statvfs", pathv);
+ 
+   f_bsize = buf.f_bsize;
+   f_frsize = buf.f_frsize;
+@@ -276,7 +279,7 @@ guestfs_int_mllib_statvfs_statvfs (value pathv)
+                            (PULARGE_INTEGER) &free_bytes_available,
+                            (PULARGE_INTEGER) &total_number_of_bytes,
+                            (PULARGE_INTEGER) &total_number_of_free_bytes))
+-    unix_error (EIO, (char *) "statvfs: GetDiskFreeSpaceEx", pathv);
++    caml_unix_error (EIO, (char *) "statvfs: GetDiskFreeSpaceEx", pathv);
+ 
+   /* XXX I couldn't determine how to get block size.  MSDN has a
+    * unhelpful hard-coded list here:
+@@ -341,15 +344,17 @@ guestfs_int_mllib_statvfs_statvfs (value pathv)
+   CAMLreturn (rv);
+ }
+ 
+-/* NB: This is a [@@noalloc] call. */
+ value
+ guestfs_int_mllib_statvfs_is_network_filesystem (value pathv)
+ {
++  CAMLparam1 (pathv);
++  CAMLlocal1 (rv);
++
+ #ifdef HAVE_STATFS
+   struct statfs buf;
+ 
+   if (statfs (String_val (pathv), &buf) == -1)
+-    unix_error (errno, (char *) "statvfs", pathv);
++    caml_unix_error (errno, (char *) "statvfs", pathv);
+ 
+   /* Some but not all of these are defined in <linux/magic.h>. */
+ #ifndef CIFS_MAGIC_NUMBER
+@@ -362,12 +367,14 @@ guestfs_int_mllib_statvfs_is_network_filesystem (value pathv)
+ #define SMB_SUPER_MAGIC 0x517b
+ #endif
+ 
+-  return Val_bool ((unsigned int) buf.f_type == CIFS_MAGIC_NUMBER ||
+-                   (unsigned int) buf.f_type == NFS_SUPER_MAGIC ||
+-                   (unsigned int) buf.f_type == SMB_SUPER_MAGIC);
++  rv = Val_bool ((unsigned int) buf.f_type == CIFS_MAGIC_NUMBER ||
++                 (unsigned int) buf.f_type == NFS_SUPER_MAGIC ||
++                 (unsigned int) buf.f_type == SMB_SUPER_MAGIC);
+ #else
+-  return Val_bool (0);
++  rv = Val_bool (0);
+ #endif
++
++  CAMLreturn (rv);
+ }
+ 
+ /* NB: This is a [@@noalloc] call. */
+diff --git a/common/mlutils/unix_utils.ml b/common/mlutils/unix_utils.ml
+index b79144a98..5898cbec7 100644
+--- a/common/mlutils/unix_utils.ml
++++ b/common/mlutils/unix_utils.ml
+@@ -82,7 +82,7 @@ module StatVFS = struct
+   let free_space { f_bsize = bsize; f_bavail = bavail } = bsize *^ bavail
+ 
+   external is_network_filesystem : string -> bool =
+-    "guestfs_int_mllib_statvfs_is_network_filesystem" [@@noalloc]
++    "guestfs_int_mllib_statvfs_is_network_filesystem"
+ end
+ 
+ module Sysconf = struct
+diff --git a/common/mlvisit/Makefile.am b/common/mlvisit/Makefile.am
+index beff0bc64..40ecb0f76 100644
+--- a/common/mlvisit/Makefile.am
++++ b/common/mlvisit/Makefile.am
+@@ -88,7 +88,7 @@ endif
+ libmlvisit_a_DEPENDENCIES = $(OBJECTS)
+ 
+ $(MLVISIT_CMA): $(OBJECTS) libmlvisit.a
+-	$(OCAMLFIND) mklib $(OCAMLPACKAGES) \
++	$(AM_V_GEN) $(OCAMLFIND) mklib $(OCAMLPACKAGES) \
+ 	    $(OBJECTS) $(libmlvisit_a_OBJECTS) -cclib -lvisit -o mlvisit
+ 
+ # Tests.
+diff --git a/common/mlxml/Makefile.am b/common/mlxml/Makefile.am
+index e56b6fd54..db131ab30 100644
+--- a/common/mlxml/Makefile.am
++++ b/common/mlxml/Makefile.am
+@@ -84,7 +84,7 @@ endif
+ libmlxml_a_DEPENDENCIES = $(OBJECTS)
+ 
+ $(MLXML_CMA): $(OBJECTS) libmlxml.a
+-	$(OCAMLFIND) mklib $(OCAMLPACKAGES) \
++	$(AM_V_GEN) $(OCAMLFIND) mklib $(OCAMLPACKAGES) \
+ 	    $(OBJECTS) $(libmlxml_a_OBJECTS) \
+ 	    -o mlxml
+ 
+diff --git a/common/options/keys.c b/common/options/keys.c
+index 7027104a9..b8f19cebf 100644
+--- a/common/options/keys.c
++++ b/common/options/keys.c
+@@ -78,6 +78,7 @@ read_key (const char *param)
+   len = getline (&ret, &allocsize, infp);
+   if (len == -1) {
+     perror ("getline");
++    free (ret);
+     ret = NULL;
+     goto error;
+   }
+diff --git a/common/parallel/parallel.c b/common/parallel/parallel.c
+index 18b060740..88ad819f0 100644
+--- a/common/parallel/parallel.c
++++ b/common/parallel/parallel.c
+@@ -221,6 +221,7 @@ worker_thread (void *thread_data_vp)
+     g = guestfs_create ();
+     if (g == NULL) {
+       perror ("guestfs_create");
++      fclose (fp);
+       thread_data->r = -1;
+       return &thread_data->r;
+     }
