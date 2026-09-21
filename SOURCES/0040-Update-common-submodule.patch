@@ -1,0 +1,26 @@
+From 56e93fd5a1c2aac2c81dd281087b322181433c19 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 17 Sep 2026 11:53:14 +0100
+Subject: [PATCH] Update common submodule
+
+For RHEL 10.2, pick this commit:
+
+  Richard W.M. Jones (1):
+      mlcustomize: Drop setfiles -F flag
+
+Fixes: RHEL-260203
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common dd34aebb4..5e4e9694b:
+diff --git a/common/mlcustomize/SELinux_relabel.ml b/common/mlcustomize/SELinux_relabel.ml
+index f1729e3f4..62450e41b 100644
+--- a/common/mlcustomize/SELinux_relabel.ml
++++ b/common/mlcustomize/SELinux_relabel.ml
+@@ -122,4 +122,4 @@ and use_setfiles g =
+             Array.of_list in
+ 
+   (* Relabel everything. *)
+-  g#setfiles ~force:true specfile mps
++  g#setfiles specfile mps

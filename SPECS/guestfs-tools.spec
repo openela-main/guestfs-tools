@@ -16,7 +16,7 @@
 Summary:       Tools to access and modify virtual machine disk images
 Name:          guestfs-tools
 Version:       1.54.0
-Release:       10%{?dist}
+Release:       11%{?dist}
 License:       GPL-2.0-or-later AND LGPL-2.0-or-later
 
 # Build only for architectures that have a kernel
@@ -84,6 +84,7 @@ Patch0036:     0036-builder-customize-Combine-and-rework-firstboot-docum.patch
 Patch0037:     0037-customize-Document-location-of-Windows-sentinel-file.patch
 Patch0038:     0038-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
 Patch0039:     0039-RHEL-builder-Disable-opensuse-repository.patch
+Patch0040:     0040-Update-common-submodule.patch
 
 # Basic build requirements.
 BuildRequires: autoconf, automake, libtool, gettext-devel
@@ -435,6 +436,10 @@ end
 
 
 %changelog
+* Thu Sep 17 2026 Richard W.M. Jones <rjones@redhat.com> - 1.54.0-11
+- Drop setfiles -F flag
+  resolves: RHEL-260203
+
 * Thu May 07 2026 Richard W.M. Jones <rjones@redhat.com> - 1.54.0-10
 - Fix binary LUKS keys
   resolves: RHEL-174518
