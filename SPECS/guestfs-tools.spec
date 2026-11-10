@@ -8,15 +8,15 @@
 %global verify_tarball_signature 1
 
 # The source directory.
-%global source_directory 1.54-stable
+%global source_directory 1.56-stable
 
 # Filter perl provides.
 %{?perl_default_filter}
 
 Summary:       Tools to access and modify virtual machine disk images
 Name:          guestfs-tools
-Version:       1.54.0
-Release:       11%{?dist}
+Version:       1.56.0
+Release:       1%{?dist}
 License:       GPL-2.0-or-later AND LGPL-2.0-or-later
 
 # Build only for architectures that have a kernel
@@ -42,56 +42,18 @@ Source2:       libguestfs.keyring
 Source3:       copy-patches.sh
 
 # Patches are maintained in the following repository:
-# https://github.com/rwmjones/guestfs-tools/commits/rhel-10.2
+# https://github.com/libguestfs/guestfs-tools/commits/rhel-10.3
 
 # Patches.
-Patch0001:     0001-docs-Move-release-note-about-GNU-gettext-to-build-se.patch
-Patch0002:     0002-builder-Update-link-to-templates-to-use-https.patch
-Patch0003:     0003-builder-Replace-cpu-host-with-cpu-max-in-example.patch
-Patch0004:     0004-customize-Fixes-for-selinux-relabelling-and-Windows-.patch
-Patch0005:     0005-Update-common-submodule.patch
-Patch0006:     0006-.gitignore-Ignore-.bak-files.patch
-Patch0007:     0007-builder-sysprep-Use-quoted-string-literals-in-a-few-.patch
-Patch0008:     0008-builder-templates-make-template.ml-Fix-quoting.patch
-Patch0009:     0009-builder-templates-make-template.ml-Use-quoted-string.patch
-Patch0010:     0010-builder-templates-make-template.ml-Add-str-and-unix-.patch
-Patch0011:     0011-daemon-generator-Use-power-of-2-for-initial-size-of-.patch
-Patch0012:     0012-builder-Build-fedora-42-template.patch
-Patch0013:     0013-Update-common-submodule.patch
-Patch0014:     0014-common-update-submodule.patch
-Patch0015:     0015-pod-Document-removal-of-sm-options.patch
-Patch0016:     0016-test-data-phony-guests-Increase-size-of-Windows-imag.patch
-Patch0017:     0017-inspector-Add-new-class-field-to-output-of-virt-insp.patch
-Patch0018:     0018-inspector-Add-windows_group_policy-is-Windows-GPOs-d.patch
-Patch0019:     0019-inspector-For-xfs-try-to-find-and-print-the-filesyst.patch
-Patch0020:     0020-Sort-some-entries-in-.gitignore-into-order.patch
-Patch0021:     0021-build-Add-NULL-as-a-convenient-list-terminator.patch
-Patch0022:     0022-Move-virt-filesystems-virt-log-virt-ls-virt-tail-to-.patch
-Patch0023:     0023-filesystems-Optionally-display-filesystem-version.patch
-Patch0024:     0024-Update-common-submodule.patch
-Patch0025:     0025-Update-common-submodule.patch
-Patch0026:     0026-Update-common-submodule.patch
-Patch0027:     0027-common-update-submodule.patch
-Patch0028:     0028-common-update-submodule.patch
-Patch0029:     0029-virt-builder-document-Windows-firstboot-exit-code-be.patch
-Patch0030:     0030-virt-builder-document-exit-code-250-for-Windows-firs.patch
-Patch0031:     0031-common-update-submodule.patch
-Patch0032:     0032-sysprep-Remove-documentation-about-copying-and-cloni.patch
-Patch0033:     0033-sysprep-Improve-synopsis-section.patch
-Patch0034:     0034-sysprep-Rework-documentation.patch
-Patch0035:     0035-customize-sysprep-Move-firstboot-docs-from-sysprep-c.patch
-Patch0036:     0036-builder-customize-Combine-and-rework-firstboot-docum.patch
-Patch0037:     0037-customize-Document-location-of-Windows-sentinel-file.patch
-Patch0038:     0038-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
-Patch0039:     0039-RHEL-builder-Disable-opensuse-repository.patch
-Patch0040:     0040-Update-common-submodule.patch
+Patch0001:     0001-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
+Patch0002:     0002-RHEL-builder-Disable-opensuse-repository.patch
 
 # Basic build requirements.
 BuildRequires: autoconf, automake, libtool, gettext-devel
 BuildRequires: gcc, gcc-c++
 BuildRequires: make
 BuildRequires: glibc-utils
-BuildRequires: libguestfs-devel >= 1:1.58.1-6
+BuildRequires: libguestfs-devel >= 1:1.59.7-1
 BuildRequires: libguestfs-xfs
 BuildRequires: perl(Pod::Simple)
 BuildRequires: perl(Pod::Man)
@@ -138,7 +100,7 @@ BuildRequires: gnupg2
 %endif
 
 # Ensure a minimum version of libguestfs is installed.
-Requires:      libguestfs%{?_isa} >= 1:1.58.1-6
+Requires:      libguestfs%{?_isa} >= 1:1.59.7-1
 
 # For virt-builder:
 Requires:      curl
@@ -436,20 +398,15 @@ end
 
 
 %changelog
-* Thu Sep 17 2026 Richard W.M. Jones <rjones@redhat.com> - 1.54.0-11
-- Drop setfiles -F flag
-  resolves: RHEL-260203
-
-* Thu May 07 2026 Richard W.M. Jones <rjones@redhat.com> - 1.54.0-10
+* Tue Jul 14 2026 Richard W.M. Jones <rjones@redhat.com> - 1.56.0-1
+- Rebase to guestfs-tools 1.56.0
+  Synchronize spec file with Fedora
+  resolves: RHEL-153360
 - Fix binary LUKS keys
-  resolves: RHEL-174518
+  resolves: RHEL-171896
 - Windows firstboot: Add exit code 250 to skip reboots
   Rework documentation for firstboot feature
-  resolves: RHEL-174517
-- Write sentinel file after firstboot scripts finish
-  related: RHEL-161192
-- Fix location of Windows Vista and Windows 2008 Server R1 drivers
-  related: RHEL-174513
+  resolves: RHEL-170706, RHEL-170708
 
 * Thu Feb 05 2026 Richard W.M. Jones <rjones@redhat.com> - 1.54.0-9
 - Synchronize spec file with Fedora

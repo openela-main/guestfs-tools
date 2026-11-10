@@ -1,4 +1,4 @@
-From b6a3ccc92752715293a801a025803a4ae52ec00b Mon Sep 17 00:00:00 2001
+From a2e0203b232c0b2661b1e5bb17678058b6309bd3 Mon Sep 17 00:00:00 2001
 From: "Richard W.M. Jones" <rjones@redhat.com>
 Date: Mon, 21 Nov 2022 13:03:22 +0000
 Subject: [PATCH] RHEL: builder: Disable opensuse repository
