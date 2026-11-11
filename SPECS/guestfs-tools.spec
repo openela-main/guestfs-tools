@@ -16,7 +16,7 @@
 Summary:       Tools to access and modify virtual machine disk images
 Name:          guestfs-tools
 Version:       1.56.0
-Release:       1%{?dist}
+Release:       2%{?dist}
 License:       GPL-2.0-or-later AND LGPL-2.0-or-later
 
 # Build only for architectures that have a kernel
@@ -47,13 +47,16 @@ Source3:       copy-patches.sh
 # Patches.
 Patch0001:     0001-RHEL-Reject-use-of-libguestfs-winsupport-features-ex.patch
 Patch0002:     0002-RHEL-builder-Disable-opensuse-repository.patch
+Patch0003:     0003-mlcustomize-Add-new-selinux-relabel-excludes-flag.patch
+Patch0004:     0004-common-update-submodule.patch
+Patch0005:     0005-common-update-submodule.patch
 
 # Basic build requirements.
 BuildRequires: autoconf, automake, libtool, gettext-devel
 BuildRequires: gcc, gcc-c++
 BuildRequires: make
 BuildRequires: glibc-utils
-BuildRequires: libguestfs-devel >= 1:1.59.7-1
+BuildRequires: libguestfs-devel >= 1:1.60.1-1
 BuildRequires: libguestfs-xfs
 BuildRequires: perl(Pod::Simple)
 BuildRequires: perl(Pod::Man)
@@ -100,7 +103,7 @@ BuildRequires: gnupg2
 %endif
 
 # Ensure a minimum version of libguestfs is installed.
-Requires:      libguestfs%{?_isa} >= 1:1.59.7-1
+Requires:      libguestfs%{?_isa} >= 1:1.60.1-1
 
 # For virt-builder:
 Requires:      curl
@@ -398,6 +401,12 @@ end
 
 
 %changelog
+* Thu Sep 17 2026 Richard W.M. Jones <rjones@redhat.com> - 1.56.0-2
+- Add --selinux-relabel-excludes and --selinux-relabel-at-boot options
+  resolves: RHEL-260495
+- Drop setfiles -F flag
+  resolves: RHEL-260202
+
 * Tue Jul 14 2026 Richard W.M. Jones <rjones@redhat.com> - 1.56.0-1
 - Rebase to guestfs-tools 1.56.0
   Synchronize spec file with Fedora

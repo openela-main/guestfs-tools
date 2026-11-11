@@ -1,0 +1,169 @@
+From 298212f565c260a0ff0726aa37050236ba2fb6c0 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Sat, 8 Aug 2026 08:08:35 +0100
+Subject: [PATCH] common: update submodule
+
+  Richard W.M. Jones (4):
+        mlcustomize/guest_packages.ml: Reformat the code
+        mlcustomize/guest_packages.ml: Add yum/dnf4 --setopt=skip_if_unavailable=True
+        mlcustomize/firstboot.ml: Print the version of Windows
+        mlcustomize/firstboot.ml: Use rem for comments (instead of '::')
+
+(cherry picked from commit 8ff27376d5d9491b0b7b2fad0c648af459529ca9)
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common 1fd00ebcc..b3841fbc2:
+diff --git a/common/mlcustomize/firstboot.ml b/common/mlcustomize/firstboot.ml
+index 366beca9e..74342be8e 100644
+--- a/common/mlcustomize/firstboot.ml
++++ b/common/mlcustomize/firstboot.ml
+@@ -299,12 +299,13 @@ exit /b
+ :main
+ echo starting firstboot service
+ echo effective user: %%USERNAME%% domain: %%USERDOMAIN%%
++ver
+ 
+ if not exist "%%scripts_done%%" (
+   mkdir "%%scripts_done%%"
+ )
+ 
+-:: Pick the next script to run.
++rem Pick the next script to run.
+ for %%%%f in ("%%scripts%%"\*.bat) do (
+   echo running "%%%%f"
+   pushd "%%scripts%%"
+@@ -320,23 +321,23 @@ for %%%%f in ("%%scripts%%"\*.bat) do (
+     echo Script failed, will retry on next boot
+   )
+ 
+-  :: Reboot the computer only if exit code indicates.
+-  :: Exit code 250 means do not reboot, otherwise reboot
+-  :: Reboot is necessary to free any locked files which
+-  :: may prevent later scripts from running.
++  rem Reboot the computer only if exit code indicates.
++  rem Exit code 250 means do not reboot, otherwise reboot.
++  rem Reboot is necessary to free any locked files which
++  rem may prevent later scripts from running.
+   if !elvl! NEQ 250 (
+     shutdown /r /t 0 /y
+ 
+-    :: Exit the script (in case shutdown returns before rebooting).
+-    :: On next boot, the whole firstboot service will be called again.
+-
++    rem Exit the script (in case shutdown returns before
++    rem rebooting).  On next boot, the whole firstboot
++    rem service will be called again.
+     exit /b
+   )
+ )
+ 
+-:: Fallthrough here if there are no scripts.
++rem Fallthrough here if there are no scripts.
+ 
+-:: Touch a sentinel file to say we have finished.
++rem Touch a sentinel file to say we have finished.
+ type nul > "%%firstboot%%\complete"
+ 
+ echo uninstalling firstboot service
+diff --git a/common/mlcustomize/guest_packages.ml b/common/mlcustomize/guest_packages.ml
+index 12beaa3d9..933b8c202 100644
+--- a/common/mlcustomize/guest_packages.ml
++++ b/common/mlcustomize/guest_packages.ml
+@@ -44,7 +44,13 @@ let error_unimplemented_package_manager flag pm =
+                     flag pm in
+   raise (Unimplemented_package_manager msg)
+ 
+-(* http://distrowatch.com/dwres.php?resource=package-management *)
++(* http://distrowatch.com/dwres.php?resource=package-management
++ *
++ * yum/dnf --setopt=skip_if_unavailable=True makes package installation
++ * a bit more reliable if an unrelated repo, or the network, are not
++ * available.  The command will still fail if the package itself cannot
++ * be downloaded.
++ *)
+ let install_command packages package_management =
+   let quoted_args = String.concat " " (List.map quote packages) in
+   match package_management with
+@@ -61,13 +67,20 @@ let install_command packages package_management =
+       apt-get $apt_opts update
+       apt-get $apt_opts install %s
+     " quoted_args
+-  | "dnf" ->    sprintf "dnf -y install %s" quoted_args
+-  | "pisi" ->   sprintf "pisi it %s" quoted_args
+-  | "pacman" -> sprintf "pacman -S --noconfirm %s" quoted_args
+-  | "urpmi" ->  sprintf "urpmi %s" quoted_args
+-  | "xbps" ->   sprintf "xbps-install -Sy %s" quoted_args
+-  | "yum" ->    sprintf "yum -y install %s" quoted_args
+-  | "zypper" -> sprintf "zypper -n in -l %s" quoted_args
++  | "dnf" ->
++     sprintf "dnf --setopt=skip_if_unavailable=True -y install %s" quoted_args
++  | "pisi" ->
++     sprintf "pisi it %s" quoted_args
++  | "pacman" ->
++     sprintf "pacman -S --noconfirm %s" quoted_args
++  | "urpmi" ->
++     sprintf "urpmi %s" quoted_args
++  | "xbps" ->
++     sprintf "xbps-install -Sy %s" quoted_args
++  | "yum" ->
++     sprintf "yum --setopt=skip_if_unavailable=True -y install %s" quoted_args
++  | "zypper" ->
++     sprintf "zypper -n in -l %s" quoted_args
+ 
+   | "unknown" ->
+     error_unknown_package_manager "--install"
+@@ -90,13 +103,18 @@ let update_command package_management =
+       apt-get $apt_opts upgrade
+     "
+   | "dnf" ->
+-     sprintf "dnf%s -y --best upgrade"
++     sprintf "dnf%s --setopt=skip_if_unavailable=True -y --best upgrade"
+              (if verbose () then " --verbose" else "")
+-  | "pisi" ->   "pisi upgrade"
+-  | "pacman" -> "pacman -Su"
+-  | "urpmi" ->  "urpmi --auto-select"
+-  | "xbps" ->   "xbps-install -Suy"
+-  | "yum" ->    "yum -y update"
++  | "pisi" ->
++     "pisi upgrade"
++  | "pacman" ->
++     "pacman -Su"
++  | "urpmi" ->
++     "urpmi --auto-select"
++  | "xbps" ->
++     "xbps-install -Suy"
++  | "yum" ->
++     "yum -y --setopt=skip_if_unavailable=True update"
+   | "zypper" -> "zypper -n dup -l"
+ 
+   | "unknown" ->
+@@ -116,14 +134,20 @@ let uninstall_command packages package_management =
+       apt-get $apt_opts remove %s
+     " quoted_args
+   | "dnf" ->
+-     sprintf "dnf -y --disableplugin=subscription-manager remove %s"
++     sprintf "dnf -y --setopt=skip_if_unavailable=True --disableplugin=subscription-manager remove %s"
+              quoted_args
+-  | "pisi" ->   sprintf "pisi rm %s" quoted_args
+-  | "pacman" -> sprintf "pacman -R %s" quoted_args
+-  | "urpmi" ->  sprintf "urpme %s" quoted_args
+-  | "xbps" ->   sprintf "xbps-remove -Sy %s" quoted_args
+-  | "yum" ->    sprintf "yum -y remove %s" quoted_args
+-  | "zypper" -> sprintf "zypper -n rm %s" quoted_args
++  | "pisi" ->
++     sprintf "pisi rm %s" quoted_args
++  | "pacman" ->
++     sprintf "pacman -R %s" quoted_args
++  | "urpmi" ->
++     sprintf "urpme %s" quoted_args
++  | "xbps" ->
++     sprintf "xbps-remove -Sy %s" quoted_args
++  | "yum" ->
++     sprintf "yum -y --setopt=skip_if_unavailable=True remove %s" quoted_args
++  | "zypper" ->
++     sprintf "zypper -n rm %s" quoted_args
+ 
+   | "unknown" ->
+     error_unknown_package_manager "--uninstall"

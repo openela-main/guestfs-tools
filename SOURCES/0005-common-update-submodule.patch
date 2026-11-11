@@ -1,0 +1,703 @@
+From c355dba97ff06715d7fdcab535615730c607cbc8 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Fri, 14 Aug 2026 12:27:05 +0100
+Subject: [PATCH] common: update submodule
+
+  Richard W.M. Jones (10):
+        mlcustomize/guest_packages.ml: Add clean_requirements_on_remove option
+        mlcustomize/Makefile.am: Include libguestfs pkgconf CFLAGS
+        mlcustomize: Update generated files for --selinux-relabel-at-boot
+        mlcustomize: Turn excludes parameter into a labelled parameter
+        mlcustomize/SELinux_relabel.ml: Refactor touch /.autorelabel
+        mlcustomize: Add --selinux-relabel-at-boot functionality
+        mlcustomize/SELinux_relabel.ml: Set SELinux label on /.autorelabel
+        mlcustomize/inject_virtio_win.ml: Move inspection data to sub-struct
+        mlcustomize/inject_virtio_win.ml: Rename virtio_win_path function
+        mlcustomize/inject_virtio_win.ml: Fix no-virtio-win case
+
+  Surya Gupta (1):
+        inject_virtio_win: use lazy handle to avoid 3 appliance launches
+
+(cherry picked from commit 2ff110d77d842d9148c4da7f36d8b6344063ba51)
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common b3841fbc2..84083f6f2:
+diff --git a/common/mlcustomize/Makefile.am b/common/mlcustomize/Makefile.am
+index 3bdff2a63..48ac0f012 100644
+--- a/common/mlcustomize/Makefile.am
++++ b/common/mlcustomize/Makefile.am
+@@ -106,6 +106,7 @@ libmlcustomize_a_CPPFLAGS = \
+ 	-I$(top_srcdir)/common/mlxml
+ libmlcustomize_a_CFLAGS = \
+ 	$(WARN_CFLAGS) $(WERROR_CFLAGS) \
++	$(LIBGUESTFS_CFLAGS) \
+ 	-fPIC
+ 
+ BOBJECTS = $(SOURCES_ML:.ml=.cmo)
+diff --git a/common/mlcustomize/SELinux_relabel.ml b/common/mlcustomize/SELinux_relabel.ml
+index 3fd972214..08c05600b 100644
+--- a/common/mlcustomize/SELinux_relabel.ml
++++ b/common/mlcustomize/SELinux_relabel.ml
+@@ -28,19 +28,26 @@ module G = Guestfs
+  * [libguestfs.git/daemon/selinux.ml].
+  *)
+ 
+-let rec relabel (g : G.guestfs) excludes =
++let rec relabel ?(at_boot = false) ?(excludes = []) (g : G.guestfs) =
+   (* Is the guest using SELinux?  (Otherwise this is a no-op). *)
+   if is_selinux_guest g then (
+-    try
+-      use_setfiles g excludes;
+-      (* That worked, so we don't need to autorelabel. *)
+-      g#rm_f "/.autorelabel"
+-    with Failure _ ->
+-      (* This is the fallback in case something in the setfiles
+-       * method didn't work.  That includes the case where a non-SELinux
+-       * host is processing an SELinux guest, and other things.
+-       *)
+-      g#touch "/.autorelabel"
++    if not at_boot then (
++      try
++        (* Try to relabel during customization/conversion. *)
++        use_setfiles g excludes;
++        (* That worked, so we don't need to autorelabel. *)
++        g#rm_f "/.autorelabel"
++      with Failure _ ->
++        (* This is the fallback in case something in the setfiles
++         * method didn't work.  That includes the case where a non-SELinux
++         * host is processing an SELinux guest, and other things.
++         *)
++        touch_autorelabel g
++    )
++    else (
++      (* Always do it at boot. *)
++      touch_autorelabel g
++    )
+   )
+ 
+ and is_selinux_guest g =
+@@ -126,3 +133,19 @@ and use_setfiles g excludes =
+ 
+   (* Relabel everything. *)
+   g#setfiles ~excludes specfile mps
++
++and touch_autorelabel g =
++  let path = "/.autorelabel" in
++  g#touch path;
++
++  (* You cannot just touch /.autorelabel because SELinux itself
++   * will prevent this file from being read and prevent the
++   * autorelabel service from running(!)  Therefore we have to
++   * guess at the correct label here.  Ugh.
++   *
++   * This label name has been stable from at least RHEL 7 up to
++   * Fedora 45.
++   *)
++  let label = "system_u:object_r:etc_runtime_t:s0" in
++  let len = String.length label in
++  g#setxattr "security.selinux" label len path
+diff --git a/common/mlcustomize/SELinux_relabel.mli b/common/mlcustomize/SELinux_relabel.mli
+index 5f1ae7ff6..eaee76c26 100644
+--- a/common/mlcustomize/SELinux_relabel.mli
++++ b/common/mlcustomize/SELinux_relabel.mli
+@@ -18,15 +18,20 @@
+ 
+ (** SELinux-relabel the filesystem. *)
+ 
+-val relabel : Guestfs.guestfs -> string list -> unit
++val relabel : ?at_boot : bool -> ?excludes : string list ->
++              Guestfs.guestfs -> unit
+ (** Relabel the mounted guestfs filesystem using the current SELinux
+     policy that applies to the guest.
+ 
+     If the guest does not look like it uses SELinux, this does nothing.
+ 
+-    The parameters are the guestfs handle and a list of directories
+-    that may be excluded (by passing I<--selinux-relabel-exclude>
+-    one or more times).
++    The required parameter is the guestfs handle.
++
++    Optional [?at_boot] (if true) defers labelling to boot
++    (I<--selinux-relabel-at-boot>).
++
++    Optional [?excludes] is a list of directories that may be excluded
++    (by passing I<--selinux-relabel-exclude> one or more times).
+ 
+     In case relabelling is not possible (since it is an optional
+     feature which requires the setfiles(8) program), instead we
+diff --git a/common/mlcustomize/customize-options.pod b/common/mlcustomize/customize-options.pod
+index f6e68f1e0..cd3cb8b9e 100644
+--- a/common/mlcustomize/customize-options.pod
++++ b/common/mlcustomize/customize-options.pod
+@@ -386,6 +386,36 @@ It cannot delete directories, only regular files.
+ 
+ This is a compatibility option that does nothing.
+ 
++=item B<--selinux-relabel-at-boot>
++
++This advanced option lets you defer
++SELinux relabelling until the first time the guest boots
++after conversion.
++
++The advantage of doing this is that conversion is quicker
++and uses less memory.
++
++The disadvantages are:
++
++=over 4
++
++=item *
++
++The guest will take I<much> longer to boot up and become ready
++the first time it boots.
++
++=item *
++
++The guest will reboot at least once.
++
++=item *
++
++SELinux relabelling problems cannot be detected during conversion.
++
++=back
++
++If in doubt, do not use this option.
++
+ =item B<--selinux-relabel-exclude> DIR
+ 
+ Exclude directories from being relabelled.
+diff --git a/common/mlcustomize/customize-synopsis.pod b/common/mlcustomize/customize-synopsis.pod
+index d6c4a2804..2484b317a 100644
+--- a/common/mlcustomize/customize-synopsis.pod
++++ b/common/mlcustomize/customize-synopsis.pod
+@@ -15,3 +15,4 @@
+     [--upload FILE:DEST] [--write FILE:CONTENT] [--no-logfile]
+     [--password-crypto md5|sha256|sha512] [--no-selinux-relabel]
+     [--selinux-relabel] [--selinux-relabel-exclude DIR]
++    [--selinux-relabel-at-boot]
+diff --git a/common/mlcustomize/customize_cmdline.ml b/common/mlcustomize/customize_cmdline.ml
+index 24e05dc9e..7a79f5468 100644
+--- a/common/mlcustomize/customize_cmdline.ml
++++ b/common/mlcustomize/customize_cmdline.ml
+@@ -117,6 +117,8 @@ and flags = {
+       (* --selinux-relabel *)
+   selinux_relabel_excludes : string list;
+       (* --selinux-relabel-exclude *)
++  selinux_relabel_at_boot : bool;
++      (* --selinux-relabel-at-boot *)
+ }
+ 
+ type argspec = Getopt.keys * Getopt.spec * Getopt.doc
+@@ -128,6 +130,7 @@ let rec argspec ?(v2v = false) () =
+   let no_selinux_relabel = ref false in
+   let selinux_relabel_ignored = ref false in
+   let selinux_relabel_excludes = ref [] in
++  let selinux_relabel_at_boot = ref false in
+ 
+   let rec get_ops () = {
+     ops = List.rev !ops;
+@@ -139,6 +142,7 @@ let rec argspec ?(v2v = false) () =
+     no_selinux_relabel = !no_selinux_relabel;
+     selinux_relabel_ignored = !selinux_relabel_ignored;
+     selinux_relabel_excludes = !selinux_relabel_excludes;
++    selinux_relabel_at_boot = !selinux_relabel_at_boot;
+   }
+   in
+ 
+@@ -501,6 +505,12 @@ let rec argspec ?(v2v = false) () =
+       s_"Exclude directories from SELinux relabelling"
+     ),
+     Some "DIR", "Exclude directories from being relabelled.\n\nThis advanced option lets you list directories in the guest which\nshould not be relabelled, even when SELinux relabelling is\nenabled.  Use this carefully, as any changes that are made\ninside these directories during customization will have incorrect\nSELinux labels, leading to potential failures later, so you must\nbe sure that the directories do not need relabelling.\n\nIf in doubt, do not use this option.\n\nYou can pass the option multiple times, eg.\nI<--selinux-relabel-exclude=/foo> I<--selinux-relabel-exclude=/bar>", false;
++    (
++      [ L"selinux-relabel-at-boot" ],
++      Getopt.Set selinux_relabel_at_boot,
++      s_"Defer SELinux relabelling until boot"
++    ),
++    None, "This advanced option lets you defer\nSELinux relabelling until the first time the guest boots\nafter conversion.\n\nThe advantage of doing this is that conversion is quicker\nand uses less memory.\n\nThe disadvantages are:\n\n=over 4\n\n=item *\n\nThe guest will take I<much> longer to boot up and become ready\nthe first time it boots.\n\n=item *\n\nThe guest will reboot at least once.\n\n=item *\n\nSELinux relabelling problems cannot be detected during conversion.\n\n=back\n\nIf in doubt, do not use this option.", false;
+   ]
+   and customize_read_from_file filename =
+     let forbidden_commands = [
+diff --git a/common/mlcustomize/customize_cmdline.mli b/common/mlcustomize/customize_cmdline.mli
+index abe109531..7770d5d45 100644
+--- a/common/mlcustomize/customize_cmdline.mli
++++ b/common/mlcustomize/customize_cmdline.mli
+@@ -109,6 +109,8 @@ and flags = {
+       (* --selinux-relabel *)
+   selinux_relabel_excludes : string list;
+       (* --selinux-relabel-exclude *)
++  selinux_relabel_at_boot : bool;
++      (* --selinux-relabel-at-boot *)
+ }
+ 
+ type argspec = Getopt.keys * Getopt.spec * Getopt.doc
+diff --git a/common/mlcustomize/customize_run.ml b/common/mlcustomize/customize_run.ml
+index 4878c00f0..73585a53c 100644
+--- a/common/mlcustomize/customize_run.ml
++++ b/common/mlcustomize/customize_run.ml
+@@ -360,8 +360,13 @@ let run (g : G.guestfs) root (ops : ops) =
+   );
+ 
+   if not ops.flags.no_selinux_relabel then (
+-    message (f_"SELinux relabelling");
+-    SELinux_relabel.relabel g ops.flags.selinux_relabel_excludes
++    let at_boot = ops.flags.selinux_relabel_at_boot in
++    if not at_boot then
++      message (f_"SELinux relabelling")
++    else
++      message (f_"SELinux relabelling deferred to first boot");
++    let excludes = ops.flags.selinux_relabel_excludes in
++    SELinux_relabel.relabel ~at_boot ~excludes g
+   );
+ 
+   (* Clean up the log file:
+diff --git a/common/mlcustomize/guest_packages.ml b/common/mlcustomize/guest_packages.ml
+index 933b8c202..fba59a64c 100644
+--- a/common/mlcustomize/guest_packages.ml
++++ b/common/mlcustomize/guest_packages.ml
+@@ -122,8 +122,14 @@ let update_command package_management =
+   | pm ->
+     error_unimplemented_package_manager "--update" pm
+ 
+-let uninstall_command packages package_management =
++let uninstall_command ?clean_requirements_on_remove
++      packages package_management =
+   let quoted_args = String.concat " " (List.map quote packages) in
++  let dnf_yum_clean_requirements_on_remove =
++    match clean_requirements_on_remove with
++    | None -> ""
++    | Some true -> "--setopt=clean_requirements_on_remove=True"
++    | Some false -> "--setopt=clean_requirements_on_remove=False" in
+   match package_management with
+   | "apk" -> sprintf "apk del %s" quoted_args
+   | "apt" ->
+@@ -134,8 +140,10 @@ let uninstall_command packages package_management =
+       apt-get $apt_opts remove %s
+     " quoted_args
+   | "dnf" ->
+-     sprintf "dnf -y --setopt=skip_if_unavailable=True --disableplugin=subscription-manager remove %s"
+-             quoted_args
++     sprintf "dnf -y --setopt=skip_if_unavailable=True %s \
++              --disableplugin=subscription-manager \
++              remove %s"
++       dnf_yum_clean_requirements_on_remove quoted_args
+   | "pisi" ->
+      sprintf "pisi rm %s" quoted_args
+   | "pacman" ->
+@@ -145,7 +153,9 @@ let uninstall_command packages package_management =
+   | "xbps" ->
+      sprintf "xbps-remove -Sy %s" quoted_args
+   | "yum" ->
+-     sprintf "yum -y --setopt=skip_if_unavailable=True remove %s" quoted_args
++     sprintf "yum -y --setopt=skip_if_unavailable=True %s \
++              remove %s"
++       dnf_yum_clean_requirements_on_remove quoted_args
+   | "zypper" ->
+      sprintf "zypper -n rm %s" quoted_args
+ 
+diff --git a/common/mlcustomize/guest_packages.mli b/common/mlcustomize/guest_packages.mli
+index 5f0925a05..ee03ca88b 100644
+--- a/common/mlcustomize/guest_packages.mli
++++ b/common/mlcustomize/guest_packages.mli
+@@ -38,7 +38,14 @@ val update_command : string -> string
+     script) for updating the OS packages that are currently installed in the
+     guest. *)
+ 
+-val uninstall_command : string list -> string -> string
++val uninstall_command : ?clean_requirements_on_remove:bool ->
++                        string list -> string -> string
+ (** [uninstall_command packages package_management] produces a properly quoted
+     shell command string suitable for execution in the guest (directly or via a
+-    Firstboot script) for uninstalling the OS packages listed in [packages]. *)
++    Firstboot script) for uninstalling the OS packages listed in [packages].
++
++    If used, [?clean_requirements_on_remove] will add
++    [--setopt=clean_requirements_on_remove=(True|False)] to the
++    command.  This is used by virt-v2v to avoid removing
++    dependencies (ie behaving like "noautoremove"). It currently
++    only works for yum/dmf. *)
+diff --git a/common/mlcustomize/inject_virtio_win.ml b/common/mlcustomize/inject_virtio_win.ml
+index 6d7cf1a1c..c61d79726 100644
+--- a/common/mlcustomize/inject_virtio_win.ml
++++ b/common/mlcustomize/inject_virtio_win.ml
+@@ -26,11 +26,23 @@ open Regedit
+ 
+ let re_blnsvr = PCRE.compile ~caseless:true "\\bblnsvr\\.exe$"
+ 
++let default_block_driver_priority = ["virtio_blk"; "vrtioblk"; "viostor"]
++
+ type t = {
+   g : Guestfs.guestfs; (** guestfs handle *)
+ 
+   root : string; (** root of inspection *)
+ 
++  inspection : inspection_t;
++  (** Inspection data needed by this module. *)
++
++  virtio_win : virtio_win_t;
++  (** Source of virtio-win drivers: an ISO file or a directory. *)
++
++  mutable block_driver_priority : string list
++  (** List of block drivers *)
++}
++and inspection_t = {
+   i_arch : string;
+   i_major_version : int;
+   i_minor_version : int;
+@@ -38,13 +50,17 @@ type t = {
+   i_product_variant : string;
+   i_windows_current_control_set : string;
+   i_windows_systemroot : string;
+-  (** Inspection data needed by this module. *)
+-
+-  virtio_win : string;
+-  (** Path to the virtio-win ISO or directory. *)
+-
+-  mutable block_driver_priority : string list
+-  (** List of block drivers *)
++}
++and virtio_win_t =
++  | Virtio_win_iso of iso_t
++  | Virtio_win_dir of dir_t
++  | No_virtio_win of string
++and iso_t = {
++  iso_path : string;
++  g2_lazy : Guestfs.guestfs Lazy.t;
++}
++and dir_t = {
++  dir_path : string;
+ }
+ 
+ type block_type = Virtio_blk | Virtio_SCSI | IDE
+@@ -62,10 +78,36 @@ type virtio_win_installed = {
+   virtio_1_0 : bool;
+ }
+ 
++let path_of_virtio_win = function
++  | Virtio_win_iso iso -> iso.iso_path
++  | Virtio_win_dir dir -> dir.dir_path
++  | No_virtio_win path -> path
++
++let make_virtio_win path =
++  if is_directory path then
++    Virtio_win_dir { dir_path = path }
++  else if is_regular_file path || is_block_device path then
++    let g2_lazy = lazy (
++      try
++        let g2 = open_guestfs ~identifier:"virtio_win" () in
++        g2#add_drive_opts path ~readonly:true;
++        g2#launch ();
++        g2#mount_ro "/dev/sda" "/";
++        g2
++      with Guestfs.Error msg ->
++        error (f_"%s: cannot open virtio-win ISO file: %s") path msg
++    ) in
++    Virtio_win_iso { iso_path = path; g2_lazy }
++  else
++    (* No valid virtio-win ISO or directory could be found.  We
++     * save the path for info and error messages.
++     *)
++    No_virtio_win path
++
+ let rec from_environment g root datadir =
+-  let t = get_inspection g root in
++  let inspection = get_inspection g root in
+ 
+-  let virtio_win =
++  let path =
+     try Sys.getenv "VIRTIO_WIN"
+     with Not_found ->
+       try Sys.getenv "VIRTIO_WIN_DIR" (* old name for VIRTIO_WIN *)
+@@ -74,11 +116,15 @@ let rec from_environment g root datadir =
+         (if Sys.file_exists iso then iso
+          else datadir // "virtio-win") in
+ 
+-  { t with virtio_win }
++  { g; root; inspection;
++    virtio_win = make_virtio_win path;
++    block_driver_priority = default_block_driver_priority }
+ 
+ and from_path g root path =
+-  let t = get_inspection g root in
+-  { t with virtio_win = path }
++  let inspection = get_inspection g root in
++  { g; root; inspection;
++    virtio_win = make_virtio_win path;
++    block_driver_priority = default_block_driver_priority }
+ 
+ and get_inspection g root =
+   (* Fail hard if inspection hasn't been done or it's not a Windows
+@@ -96,11 +142,8 @@ and get_inspection g root =
+     g#inspect_get_windows_current_control_set root in
+   let i_windows_systemroot = g#inspect_get_windows_systemroot root in
+ 
+-  { g; root;
+-    i_arch; i_major_version; i_minor_version; i_osinfo;
+-    i_product_variant; i_windows_current_control_set; i_windows_systemroot;
+-    virtio_win = "";
+-    block_driver_priority = ["virtio_blk"; "vrtioblk"; "viostor"] }
++  { i_arch; i_major_version; i_minor_version; i_osinfo;
++    i_product_variant; i_windows_current_control_set; i_windows_systemroot }
+ 
+ let get_block_driver_priority t   = t.block_driver_priority
+ let set_block_driver_priority t v = t.block_driver_priority <- v
+@@ -113,19 +156,20 @@ let vioscsi_modern_pciid = "VEN_1AF4&DEV_1048&REV_01"
+ 
+ let rec inject_virtio_win_drivers ({ g } as t) reg =
+   (* Copy the virtio drivers to the guest. *)
+-  let driverdir = sprintf "%s/Drivers/VirtIO" t.i_windows_systemroot in
++  let driverdir =
++    sprintf "%s/Drivers/VirtIO" t.inspection.i_windows_systemroot in
+   g#mkdir_p driverdir;
+ 
+   (* XXX Inelegant hack copied originally from [Convert_windows].
+    * We should be able to work this into the code properly later.
+    *)
+   let (machine : machine_type) =
+-    match t.i_arch with
++    match t.inspection.i_arch with
+     | ("i386"|"x86_64") ->
+-       (match Libosinfo_utils.get_os_by_short_id t.i_osinfo with
++       (match Libosinfo_utils.get_os_by_short_id t.inspection.i_osinfo with
+         | Some os ->
+            let devices = os#get_devices () in
+-           debug "libosinfo devices for OS \"%s\":\n%s" t.i_osinfo
++           debug "libosinfo devices for OS \"%s\":\n%s" t.inspection.i_osinfo
+              (Libosinfo_utils.string_of_osinfo_device_list devices);
+            (if Libosinfo_utils.os_devices_supports_q35 devices then Q35
+             else I440FX)
+@@ -135,15 +179,17 @@ let rec inject_virtio_win_drivers ({ g } as t) reg =
+             * Luckily this coincides almost exactly with the release of NT 6.
+             *)
+            debug "osinfo lookup failed. falling back to heuristic for windows machine type";
+-           (if t.i_major_version < 6 then I440FX else Q35)
++           (if t.inspection.i_major_version < 6 then I440FX else Q35)
+        )
+     | _ -> Virt
+   in
+ 
+   if not (copy_drivers t driverdir) then (
+       warning (f_"there are no virtio drivers available for this version of Windows (%d.%d %s %s %s).  virt-v2v looks for drivers in %s\n\nThe guest will be configured to use slower emulated devices.")
+-              t.i_major_version t.i_minor_version t.i_arch
+-              t.i_product_variant t.i_osinfo t.virtio_win;
++              t.inspection.i_major_version t.inspection.i_minor_version
++              t.inspection.i_arch
++              t.inspection.i_product_variant t.inspection.i_osinfo
++              (path_of_virtio_win t.virtio_win);
+       { block_driver = IDE; net_driver = RTL8139;
+         virtio_rng = false; virtio_balloon = false;
+         isa_pvpanic = false; virtio_socket = false;
+@@ -164,8 +210,8 @@ let rec inject_virtio_win_drivers ({ g } as t) reg =
+       match viostor_driver with
+       | None ->
+         warning (f_"there is no virtio block device driver for this version of Windows (%d.%d %s).  virt-v2v looks for this driver in %s\n\nThe guest will be configured to use a slower emulated device.")
+-                t.i_major_version t.i_minor_version
+-                t.i_arch t.virtio_win;
++                t.inspection.i_major_version t.inspection.i_minor_version
++                t.inspection.i_arch (path_of_virtio_win t.virtio_win);
+         IDE
+ 
+       | Some driver_name ->
+@@ -174,7 +220,7 @@ let rec inject_virtio_win_drivers ({ g } as t) reg =
+          *)
+         let source = driverdir // (driver_name ^ ".sys") in
+         let target = sprintf "%s/system32/drivers/%s.sys"
+-                             t.i_windows_systemroot driver_name in
++                             t.inspection.i_windows_systemroot driver_name in
+         let target = g#case_sensitive_path target in
+         let installed_block_type, legacy_pciid, modern_pciid =
+           match driver_name with
+@@ -195,8 +241,8 @@ let rec inject_virtio_win_drivers ({ g } as t) reg =
+         ) filenames in
+       if not has_netkvm then (
+         warning (f_"there is no virtio network driver for this version of Windows (%d.%d %s).  virt-v2v looks for this driver in %s\n\nThe guest will be configured to use a slower emulated device.")
+-                t.i_major_version t.i_minor_version
+-                t.i_arch t.virtio_win;
++                t.inspection.i_major_version t.inspection.i_minor_version
++                t.inspection.i_arch (path_of_virtio_win t.virtio_win);
+         RTL8139
+       )
+       else
+@@ -245,7 +291,8 @@ and inject_qemu_ga ({ g; root } as t) =
+ 
+ and inject_blnsvr ({ g; root } as t) =
+   (* Copy the files to the guest. *)
+-  let driverdir = sprintf "%s/Drivers/VirtIO" t.i_windows_systemroot in
++  let driverdir =
++    sprintf "%s/Drivers/VirtIO" t.inspection.i_windows_systemroot in
+   g#mkdir_p driverdir;
+ 
+   let files = copy_blnsvr t driverdir in
+@@ -270,7 +317,7 @@ and add_guestor_to_registry t ((g, root) as reg) drv_name drv_pciid =
+ 
+   let drv_sys_path = sprintf "system32\\drivers\\%s.sys" drv_name in
+   let common_regedits = [
+-      [ t.i_windows_current_control_set; "Services"; drv_name ],
++      [ t.inspection.i_windows_current_control_set; "Services"; drv_name ],
+       [ "Type", REG_DWORD 0x1_l;
+         "Start", REG_DWORD 0x0_l;
+         "Group", REG_SZ "SCSI miniport";
+@@ -286,7 +333,7 @@ and cdb_regedits t drv_name drv_pciid =
+    * hive may be modified here.
+    *)
+   [
+-    [ t.i_windows_current_control_set;
++    [ t.inspection.i_windows_current_control_set;
+       "Control"; "CriticalDeviceDatabase";
+       "PCI#" ^ drv_pciid ],
+     [ "Service", REG_SZ drv_name;
+@@ -299,7 +346,7 @@ and ddb_regedits inspect drv_name drv_pciid =
+    *)
+ 
+   let winarch =
+-    match inspect.i_arch with
++    match inspect.inspection.i_arch with
+     | "i386" -> "x86" | "x86_64" -> "amd64"
+     | _ -> assert false in
+ 
+@@ -364,19 +411,20 @@ and copy_blnsvr t tempdir =
+  *)
+ and copy_from_virtio_win ({ g } as t) srcdir destdir filter missing =
+   let ret = ref [] in
+-  if is_directory t.virtio_win then (
++  (match t.virtio_win with
++  | Virtio_win_dir { dir_path } ->
+     debug "windows: copy_from_virtio_win: guest tools source directory %s"
+-      t.virtio_win;
++      dir_path;
+ 
+-    let dir = t.virtio_win // srcdir in
+-    if not (is_directory dir) then missing ()
++    let srcpath = dir_path // srcdir in
++    if not (is_directory srcpath) then missing ()
+     else (
+-      let cmd = sprintf "cd %s && find -L -type f" (quote dir) in
++      let cmd = sprintf "cd %s && find -L -type f" (quote srcpath) in
+       let paths = external_command cmd in
+       List.iter (
+         fun path ->
+           if filter path then (
+-            let source = dir // path in
++            let source = srcpath // path in
+             let target_name = String.lowercase_ascii (Filename.basename path) in
+             let target = destdir // target_name in
+             debug "windows: copying guest tools bits: 'host:%s' -> '%s'"
+@@ -387,23 +435,12 @@ and copy_from_virtio_win ({ g } as t) srcdir destdir filter missing =
+           )
+       ) paths
+     )
+-  )
+-  else if is_regular_file t.virtio_win || is_block_device t.virtio_win then (
++
++  | Virtio_win_iso { iso_path; g2_lazy } ->
+     debug "windows: copy_from_virtio_win: guest tools source ISO %s"
+-      t.virtio_win;
++      iso_path;
+ 
+-    let g2 =
+-      try
+-        let g2 = open_guestfs ~identifier:"virtio_win" () in
+-        g2#add_drive_opts t.virtio_win ~readonly:true;
+-        g2#launch ();
+-        g2
+-      with Guestfs.Error msg ->
+-        error (f_"%s: cannot open virtio-win ISO file: %s") t.virtio_win msg in
+-    (* Note we are mounting this as root on the *second*
+-     * handle, not the main handle containing the guest.
+-     *)
+-    g2#mount_ro "/dev/sda" "/";
++    let g2 = Lazy.force g2_lazy in
+     let srcdir = "/" ^ srcdir in
+     if not (g2#is_dir srcdir) then missing ()
+     else (
+@@ -415,14 +452,18 @@ and copy_from_virtio_win ({ g } as t) srcdir destdir filter missing =
+             let target_name = String.lowercase_ascii (Filename.basename path) in
+             let target = destdir ^ "/" ^ target_name in
+             debug "windows: copying guest tools bits: '%s:%s' -> '%s'"
+-              t.virtio_win path target;
++              iso_path path target;
+ 
+             g#write target (g2#read_file source);
+             List.push_front target_name ret
+           )
+       ) paths;
+-    );
+-    g2#close()
++    )
++
++  | No_virtio_win path ->
++     debug "windows: copy_from_virtio_win: no virtio-win ISO or \
++            directory found at %s, skipping driver installation"
++       path
+   );
+   !ret
+ 
+@@ -432,7 +473,7 @@ and copy_from_virtio_win ({ g } as t) srcdir destdir filter missing =
+  *)
+ and virtio_iso_path_matches_guest_os t path =
+   let { i_arch = arch;
+-        i_osinfo = osinfo } = t in
++        i_osinfo = osinfo } = t.inspection in
+   try
+     (* Lowercased path, since the ISO may contain upper or lowercase path
+      * elements.
+@@ -517,7 +558,7 @@ and virtio_iso_path_matches_qemu_ga t path =
+    * elements.
+    *)
+   let lc_name = String.lowercase_ascii (Filename.basename path) in
+-  match t.i_arch, lc_name with
++  match t.inspection.i_arch, lc_name with
+   | ("i386", "qemu-ga-x86.msi")
+   | ("i386", "qemu-ga-i386.msi")
+   | ("i386", "rhev-qga.msi")
+diff --git a/common/mlcustomize/v2v-customize-options.pod b/common/mlcustomize/v2v-customize-options.pod
+index fee5f9846..c91c14915 100644
+--- a/common/mlcustomize/v2v-customize-options.pod
++++ b/common/mlcustomize/v2v-customize-options.pod
+@@ -332,6 +332,36 @@ It cannot delete directories, only regular files.
+ 
+ This is a compatibility option that does nothing.
+ 
++=item B<--selinux-relabel-at-boot>
++
++This advanced option lets you defer
++SELinux relabelling until the first time the guest boots
++after conversion.
++
++The advantage of doing this is that conversion is quicker
++and uses less memory.
++
++The disadvantages are:
++
++=over 4
++
++=item *
++
++The guest will take I<much> longer to boot up and become ready
++the first time it boots.
++
++=item *
++
++The guest will reboot at least once.
++
++=item *
++
++SELinux relabelling problems cannot be detected during conversion.
++
++=back
++
++If in doubt, do not use this option.
++
+ =item B<--selinux-relabel-exclude> DIR
+ 
+ Exclude directories from being relabelled.
+diff --git a/common/mlcustomize/v2v-customize-synopsis.pod b/common/mlcustomize/v2v-customize-synopsis.pod
+index 5a1bc0091..04d02024e 100644
+--- a/common/mlcustomize/v2v-customize-synopsis.pod
++++ b/common/mlcustomize/v2v-customize-synopsis.pod
+@@ -13,3 +13,4 @@
+     [--upload FILE:DEST] [--write FILE:CONTENT] [--no-logfile]
+     [--password-crypto md5|sha256|sha512] [--no-selinux-relabel]
+     [--selinux-relabel] [--selinux-relabel-exclude DIR]
++    [--selinux-relabel-at-boot]
